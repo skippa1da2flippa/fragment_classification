@@ -1,0 +1,26 @@
+# Virtual envs
+.venv/
+
+# IDE
+.vscode/
+
+# Data & outputs
+dataset/
+experiment_results/
+extrapolated_dataset/
+Original_artworks/
+/final_VIT 
+/Graph_ENSEMBLE_NEW 
+/Weighted_MLP_ENSEMBLE
+/gnn_ensemble_experiment 
+/masked_experiment
+/original_artwork_experiment
+
+# Python cache (recursive — covers ALL folders)
+__pycache__/
+*.py[cod]
+
+# Optional but recommended
+*.egg-info/
+dist/
+build/

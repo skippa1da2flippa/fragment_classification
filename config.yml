@@ -1,0 +1,27 @@
+
+# General
+do_train: true # Set to true to train the model
+do_eval: true  # Set to true to evaluate the model
+resume_train: "" #'checkpoints/sara-my_proposed-v5.ckpt'
+sampler: false 
+
+# Training parameters
+lr: 0.001
+max_epochs: 40
+vit: "VIT_16"
+# Data parameters
+data_dir: 'dataset' # Path to the dataset directory (should contain 'train' and 'test' subfolders)
+batch_size: 20
+num_workers: 4 # Number of workers for data loading (see PyTorch DataLoader)
+
+# Model parameters
+n_styles: 11  # Number of styles in the dataset (4 for POMPAAF, 11 for CLEOPATRA)
+model_name: 'VIT_16__-v1.ckpt' # Model name (if not `do_train` then this model name will be loaded from `ckpt_dir`)
+model_type: "vit"  # Model type (options: `proposed`, `ft`, `cnn`)
+ckpt_dir: 'VIT_16__checkpoints_CLS_single\VIT_16__-v1.ckpt /' # Path to the directory containing the model weights
+h_params_dir: "VIT_16__CLS_SINGLE_logs\\VIT_16__CLS_SINGLE_csv\\version_1\\hparams.yaml"
+sx_path: 'old' # if 'new' then the model will be trained from scratch, otherwise provide the file name in the `ckpt_dir` to load the model weights
+sx_name: "sara-my_proposed-v6"
+ 
+# Style extrapolation application
+augment: false
