@@ -140,8 +140,10 @@ class GraphEnsemble(BaseEnsemble):
             step = (attention_mask.shape[1] * len(self.learners)) + 1
 
         additional_log: dict = {
-            "graph_edges_cardinality": graph_out.graph_edges_cardinality, 
-            "graph_density": graph_out.graph_density
+            "graph_edges_cardinality_mean": graph_out.graph_edges_cardinality.mean(), 
+            "graph_edges_cardinality_std": graph_out.graph_edges_cardinality.std(),
+            "graph_density_mean": graph_out.graph_density.mean(),
+            "graph_density_std": graph_out.graph_density.std()
         }
 
         graph_batch: Batch = Batch.from_data_list(graph_out.graph_batch).to(self.device)

@@ -19,7 +19,7 @@ if __name__ == "__main__":
             "extrapolated_dataset"
         ], 
         num_workers=5, 
-        batch_size=10, 
+        batch_size=80, 
         use_test=True
     )
 
@@ -39,46 +39,46 @@ if __name__ == "__main__":
     ]
 
 
-    for w in [0.6, 0.7, 0.8, 0.9]:
-        model = GraphEnsemble(
-            model_paths=model_paths,
-            model_types=VitClassifier,
-            learners_name=[
-                "base_vit", 
-                "extr_vit",
-                "mskd_vit"
-            ], 
-            gnn_type="GAT", 
-            model_dataset_info=[0, 1, 0], 
-            min_epoch_gnn=5, 
-            gnn_num_layer=2, 
-            temperature=0.6611976761416533, 
-            decision_mode="all", 
-            graph_load_param=0.5711808045563314, 
-            lr=9.688888515970183e-05, 
-            weight_decay=7.4384267353129015e-06, 
-            learner_loss_regulizer=w,
-            keep_temperature_stable=True,
-            gnn_dropout=0.5311684635834418,
-            gnn_act_fun="gelu", 
-            central_node_mode="zero"
+    # for w in [0.6, 0.7, 0.8, 0.9]:
+    #     model = GraphEnsemble(
+    #         model_paths=model_paths,
+    #         model_types=VitClassifier,
+    #         learners_name=[
+    #             "base_vit", 
+    #             "extr_vit",
+    #             "mskd_vit"
+    #         ], 
+    #         gnn_type="GAT", 
+    #         model_dataset_info=[0, 1, 0], 
+    #         min_epoch_gnn=5, 
+    #         gnn_num_layer=2, 
+    #         temperature=0.6611976761416533, 
+    #         decision_mode="all", 
+    #         graph_load_param=0.5711808045563314, 
+    #         lr=9.688888515970183e-05, 
+    #         weight_decay=7.4384267353129015e-06, 
+    #         learner_loss_regulizer=w,
+    #         keep_temperature_stable=True,
+    #         gnn_dropout=0.5311684635834418,
+    #         gnn_act_fun="gelu", 
+    #         central_node_mode="zero"
 
-        )
+    #     )
 
-        base = "Graph_ENSEMBLE_NEW"
-        # CSV logger
-        logger_csv = CSVLogger(
-            save_dir=os.path.join(base, str(w), "Graph_ENSEMBLE_logs"),
-            name=f"Graph_ENSEMBLE_ALL",
-        )
+    #     base = "Graph_ENSEMBLE_NEW"
+    #     # CSV logger
+    #     logger_csv = CSVLogger(
+    #         save_dir=os.path.join(base, str(w), "Graph_ENSEMBLE_logs"),
+    #         name=f"Graph_ENSEMBLE_ALL",
+    #     )
 
-        checkpoint_cb = pl.callbacks.ModelCheckpoint(
-            dirpath=os.path.join(base, str(w), "Graph_ENSEMBLE_CHKT"),
-            filename=f"Graph_ENSEMBLE_ALL",
-            monitor="GAT_val_loss",
-            mode="min",
-            save_top_k=1
-        )
+    #     checkpoint_cb = pl.callbacks.ModelCheckpoint(
+    #         dirpath=os.path.join(base, str(w), "Graph_ENSEMBLE_CHKT"),
+    #         filename=f"Graph_ENSEMBLE_ALL",
+    #         monitor="GAT_val_loss",
+    #         mode="min",
+    #         save_top_k=1
+    #     )
         # early_stopping_cb = pl.callbacks.EarlyStopping(
         #     monitor="GAT_val_loss", # Metric to monitor
         #     mode="min",             # "min" for loss, "max" for accuracy/F1
@@ -90,21 +90,61 @@ if __name__ == "__main__":
         # -----------------------------
         # 🚀 Train
         # -----------------------------
-        trainer = pl.Trainer(
-            max_epochs=25,
-            logger=logger_csv,
-            callbacks=[checkpoint_cb], #early_stopping_cb],
-            enable_progress_bar=True,
-            accelerator="auto",
-            devices=1
-        )
 
-        trainer.fit(
-            model=model, 
-            datamodule=data_module
-        )
+    model = GraphEnsemble(
+        model_paths=model_paths,
+        model_types=VitClassifier,
+        learners_name=[
+            "base_vit", 
+            "extr_vit",
+            "mskd_vit"
+        ], 
+        gnn_type="GAT", 
+        model_dataset_info=[0, 1, 0], 
+        min_epoch_gnn=5, 
+        gnn_num_layer=2, 
+        temperature=0.6611976761416533, 
+        decision_mode="least", 
+        graph_load_param=0.5711808045563314, 
+        lr=9.688888515970183e-05, 
+        weight_decay=7.4384267353129015e-06, 
+        learner_loss_regulizer=0.6,
+        keep_temperature_stable=True,
+        gnn_dropout=0.5311684635834418,
+        gnn_act_fun="gelu", 
+        central_node_mode="zero"
 
-        base_path ="gnn_ensemble_experiment"
+    )
+
+    base = "Graph_ENSEMBLE_FINAL"
+    # CSV logger
+    logger_csv = CSVLogger(
+        save_dir=os.path.join(base, "Graph_ENSEMBLE_logs"),
+        name=f"Graph",
+    )
+
+    checkpoint_cb = pl.callbacks.ModelCheckpoint(
+        dirpath=os.path.join(base, "Graph_ENSEMBLE_CHKT"),
+        filename=f"Graph_ENSEMBLE",
+        monitor="GAT_val_loss",
+        mode="min",
+        save_top_k=1
+    )
+    trainer = pl.Trainer(
+        max_epochs=50,
+        logger=logger_csv,
+        callbacks=[checkpoint_cb], #early_stopping_cb],
+        enable_progress_bar=True,
+        accelerator="auto",
+        devices=1
+    )
+
+    trainer.fit(
+        model=model, 
+        datamodule=data_module
+    )
+
+    base_path ="gnn_ensemble_experiment"
 
     # for name in ["GAT", "GRAPHSAGE"]: 
     #     for mod in ["least", "most"]:
