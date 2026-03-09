@@ -123,7 +123,8 @@ class GraphEnsemble(BaseEnsemble):
                 load_param=self.hparams.graph_load_param, 
                 temperature=self.temperature,
                 valid_patch_mask=torch.stack(valid_patch_mask), 
-                device=self.device
+                device=self.device, 
+                adapt_load_param=False
             )
 
         else:
@@ -134,7 +135,8 @@ class GraphEnsemble(BaseEnsemble):
                 valid_patch_mask=diagonal_att_mask, 
                 device=self.device, 
                 mask_on_learner=self.hparams.mask_on_learner, 
-                central_node_mode=self.hparams.central_node_mode
+                central_node_mode=self.hparams.central_node_mode, 
+                adapt_load_param=False
             )
 
             step = (attention_mask.shape[1] * len(self.learners)) + 1

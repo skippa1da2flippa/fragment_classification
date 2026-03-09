@@ -11,7 +11,9 @@ extrapolated_dataset/
 Original_artworks/
 /final_VIT 
 /Graph_ENSEMBLE_NEW 
+/Graph_ENSEMBLE_FINAL
 /Weighted_MLP_ENSEMBLE
+/Weighted_MLP_ENSEMBLE_NEW
 /gnn_ensemble_experiment 
 /masked_experiment
 /original_artwork_experiment

@@ -19,7 +19,7 @@ if __name__ == "__main__":
             "extrapolated_dataset"
         ], 
         num_workers=5, 
-        batch_size=80, 
+        batch_size=100, 
         use_test=True
     )
 
@@ -37,7 +37,7 @@ if __name__ == "__main__":
             "final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_masked_head_upd\\version_0\\hparams.yaml"
         )
     ]
-    base_path = "Weighted_MLP_ENSEMBLE"
+    base_path = "Weighted_MLP_ENSEMBLE_NEW"
     study = optuna.create_study(direction="minimize")  
     study.optimize(
         func=ensemble_weighted_wrapper(
