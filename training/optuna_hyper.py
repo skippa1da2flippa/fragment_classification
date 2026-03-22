@@ -31,10 +31,6 @@ def just_a_wrapper(
         weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
         min_epochs_head = trial.suggest_int("min_epochs_head", 1, 10)
         # trial.suggest_categorical("head_type", ["CLS_SINGLE", "SEQ_ENSEMBLE"])
-        alpha = None
-        beta = None
-        kl_symmetric = True
-        kl_reduction = "sum"
         k_classes = 11
         
         if contrastive_loss:

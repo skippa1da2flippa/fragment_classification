@@ -1,3 +1,5 @@
+import json
+
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -76,6 +78,11 @@ class VitClassifier(BaseLearner): #pl.LightningModule):
         self.val_accuracy: tm.Metric = tm.Accuracy(task="multiclass", num_classes=k_classes) 
         self.val_f1: tm.Metric = tm.F1Score(task="multiclass", num_classes=k_classes) 
         self.val_auc: tm.Metric = tm.AUROC(task="multiclass", num_classes=k_classes) 
+
+        # List of prediction for the test set
+        self.test_distribution: list[Tensor] = []
+        self.test_name: list[str] = []
+        self.test_labels: list[Tensor] = []
 
         self._prev_val_loss: float = .0
 
@@ -297,7 +304,14 @@ class VitClassifier(BaseLearner): #pl.LightningModule):
 
     def training_step(self, batch: CleopatraInput, batch_idx: int) -> Tensor:
         loss, _, _, _ = self.base_step(batch)
-        self.log("train_loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+        self.log(
+            name="train_loss", 
+            value=loss, 
+            prog_bar=True, 
+            on_step=True, 
+            on_epoch=True,
+            batch_size=batch.image.shape[0]
+        )
         return loss
 
 
@@ -308,7 +322,14 @@ class VitClassifier(BaseLearner): #pl.LightningModule):
         )
 
         # log loss per batch → averaged by Lightning at epoch end
-        self.log("val_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log(
+            name="val_loss", 
+            value=loss, 
+            prog_bar=True, 
+            on_step=False, 
+            on_epoch=True,
+            batch_size=batch.image.shape[0]
+        )
 
         if not self.hparams.contrastive_loss:
             # update metrics
@@ -316,6 +337,27 @@ class VitClassifier(BaseLearner): #pl.LightningModule):
             self.val_f1.update(preds, labels)
             self.val_auc.update(logits, labels)
 
+    def test_step(self, batch: CleopatraInput, batch_idx: int) -> None:
+        loss, logits, preds, labels = self.base_step(
+            batch=batch, 
+            step_type="test"
+        )
+
+        # log loss per batch → averaged by Lightning at epoch end
+        self.log(
+            name="test_loss", 
+            value=loss, 
+            prog_bar=True, 
+            on_step=False, 
+            on_epoch=True, 
+            batch_size=batch.image.shape[0]
+        )
+
+        self.test_distribution.append(torch.softmax(logits, dim=1))
+        self.test_name.extend(batch[1]) # Assuming we have the name at postion one 
+        self.test_labels.append(labels)
+
+        
     def on_train_end(self) -> None:
         self.apply_params(
             value=False,
@@ -339,6 +381,29 @@ class VitClassifier(BaseLearner): #pl.LightningModule):
             self.val_auc.reset()
 
         self.unfreezing_handler()
+
+    def test_epoch_end(self) -> None:
+        res: list[dict] = []
+        
+        lst_test_distribution: list[list[float]] = [ten.tolist() for batch in self.test_distribution for ten in batch]
+        lst_test_labels: list[int] = [label.item() for batch in self.test_labels for label in batch]
+
+        agg_coll = zip(
+            self.test_name, 
+            lst_test_distribution, 
+            lst_test_labels
+        )
+        for name, prob, label in agg_coll:
+            res.append(
+                {
+                    "name": name,
+                    "prob": prob,
+                    "label": label
+                }
+            )
+
+        with open("test_vit.json", "w") as f:
+            json.dump(res, f, indent=2)
 
         
     def unfreezing_handler(

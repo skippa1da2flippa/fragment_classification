@@ -1,0 +1,141 @@
+import json
+import os
+import optuna
+from dataset_handler.frag import init_data_module
+from training.optuna_hyper import just_a_wrapper
+from utility.utility import BackboneType, HeadType
+from models_handler.transformer.vit import VitClassifier
+from pytorch_lightning.loggers import CSVLogger
+import pytorch_lightning as pl
+
+if __name__ == "__main__":
+
+    best_loss: float | None = None
+    best_trial: dict = {}
+    best_head_type: str = ""
+
+    for headtype in HeadType:
+        if headtype in [HeadType.NONE, HeadType.SEQ_ENSEMBLE_CLS]:
+            continue
+       
+        data_module = init_data_module(
+            data_dir="dataset_epoch",
+            batch_size=256, 
+            num_workers=12,
+            sampler=False, 
+            use_test=False, 
+            use_masked_vit=False, 
+            return_name=True
+        )
+        study = optuna.create_study(direction="minimize")  
+        study.optimize(
+            func=just_a_wrapper(
+                model_type=BackboneType.VIT_16, 
+                datamodule=data_module, 
+                num_epoch=25, 
+                contrastive_loss=False, 
+                head_type=headtype,
+                masked_attention=False, 
+                backbone_class=VitClassifier, 
+                out_dir="epoch_classification_experiment"
+            ), 
+            n_trials=5 , 
+            n_jobs=1
+        ) 
+        print(f"Best hyperparameters for CLS ce loss with head_type: {headtype.name} --->", study.best_params)
+        out_path = os.path.join(
+            "epoch_classification_experiment", 
+            f"best_hype_{headtype.name}_epoch_cls.json"
+        )
+        
+        with open(out_path, "w") as f:
+            json.dump(
+                obj={
+                    "data": study.best_params, 
+                    "validation_loss": study.best_value
+                }, 
+                fp=f, 
+                indent=4
+            )
+
+        if best_loss is None or best_loss > study.best_value:
+            best_loss = study.best_value
+            best_trial = study.best_params
+            best_head_type = headtype.name
+
+    backbone_type = "VIT_16"
+    contrastive_loss = False
+    full_dataset = True
+    head_type = best_head_type
+    k_classes = 11
+    lr = best_trial["lr"]
+    masked_attention = False
+    min_epochs_head = best_trial["min_epochs_head"]
+    num_head_mha = 12
+    use_weighted_loss = best_trial["weighted_loss"]
+    weight_decay = best_trial["weight_decay"]
+
+    data_module = init_data_module(
+        data_dir="dataset_epoch",
+        batch_size=256, 
+        num_workers=12,
+        sampler=False, 
+        use_test=full_dataset, 
+        use_masked_vit=False
+    )
+
+    model = VitClassifier(
+        backbone_type=backbone_type,
+        lr=lr,
+        weight_decay=weight_decay,
+        min_epochs_head=min_epochs_head,
+        head_type=head_type,
+        k_classes=k_classes, 
+        use_weighted_loss=use_weighted_loss, 
+        contrastive_loss=contrastive_loss, 
+        masked_attention=masked_attention
+    )
+
+    base = "epoch_final_VIT"
+    # CSV logger
+    logger_csv = CSVLogger(
+        save_dir=os.path.join(base, "FULL_VIT_TEST_logs"),
+        name=f"FINAL_VIT_csv_epoch_classification",
+    )
+
+    checkpoint_cb = pl.callbacks.ModelCheckpoint(
+        dirpath=os.path.join(base, f"FINAL_VIT_CHKT"),
+        filename=f"weights_epoch_classification",
+        monitor="val_loss",
+        mode="min",
+        save_top_k=1
+    )
+    early_stopping_cb = pl.callbacks.EarlyStopping(
+        monitor="val_loss",     # Metric to monitor
+        mode="min",             # "min" for loss, "max" for accuracy/F1
+        patience=8,             # Number of epochs with no improvement
+        min_delta=1e-4,         # Required improvement threshold
+        verbose=False
+    )
+
+    # -----------------------------
+    # 🚀 Train
+    # -----------------------------
+    trainer = pl.Trainer(
+        max_epochs=45,
+        logger=logger_csv,
+        callbacks=[checkpoint_cb, early_stopping_cb],
+        enable_progress_bar=True,
+        accelerator="auto",
+        devices=1
+    )
+
+    trainer.fit(
+        model=model, 
+        datamodule=data_module
+    )
+
+    trainer.test(
+        model=model, 
+        dataloaders=data_module.test_dataloader()
+    )

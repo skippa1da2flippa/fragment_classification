@@ -516,7 +516,8 @@ def init_data_module(
     sampler=False, 
     use_test: bool = False, 
     use_masked_vit: bool = False, 
-    use_contourn: bool = False
+    use_contourn: bool = False,
+    return_name: bool = False
 ):
     train_paths, train_labels = load_paths_and_labels(os.path.join(data_dir, 'train'))
     val_paths, val_labels = load_paths_and_labels(os.path.join(data_dir, 'valid'))
@@ -538,7 +539,8 @@ def init_data_module(
             train_sampler=sampler, 
             val_sampler=sampler,
             masking_vit=use_masked_vit,
-            use_countourn=use_contourn
+            use_countourn=use_contourn, 
+            return_name=return_name
         )
     else:
         return StyleDataModule(
@@ -553,7 +555,8 @@ def init_data_module(
             train_sampler=sampler, 
             val_sampler=sampler,
             masking_vit=use_masked_vit,
-            use_countourn=use_contourn
+            use_countourn=use_contourn, 
+            return_name=return_name
         )
     
 
