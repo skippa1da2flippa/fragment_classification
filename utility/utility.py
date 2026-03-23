@@ -13,6 +13,7 @@ import torch.nn as nn
 import torchmetrics as tm
 from torchmetrics import MetricCollection
 
+
 # ImageNet normalization
 mean3 = [0.485, 0.456, 0.406]
 mean4 = [0.485, 0.456, 0.406, 0] # Add 0 for the alpha channel
@@ -764,7 +765,6 @@ def unify_edge_mask(edge_masks: list[Tensor]) -> Tensor:
         final_edge_mask, 
         dim=1
     )
-
 
 
 class EnsembleForwardOut(NamedTuple):

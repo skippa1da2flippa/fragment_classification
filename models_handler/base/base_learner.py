@@ -6,6 +6,7 @@ from torch import Tensor
 class BaseLearner(LightningModule):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        self.test_result_path: str = "test"
 
 
     @abstractmethod

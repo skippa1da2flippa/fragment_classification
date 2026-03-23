@@ -1,4 +1,5 @@
 import json
+import os
 
 import torch
 import torch.nn.functional as F
@@ -14,7 +15,7 @@ from utility.utility import BackboneType, CleopatraInput, CleopatraOut, HeadType
 from timm.models.vision_transformer import global_pool_nlc
 
 
-class VitClassifier(BaseLearner): #pl.LightningModule):
+class VitClassifier(BaseLearner): 
     """ 
     PyTorch Lightning module for training a Vision Transformer (ViT) or DeiT-based classifier. 
     This class wraps a pretrained backbone (ViT-16 or DeiT-16, pretrained on ImageNet) and 
@@ -402,7 +403,8 @@ class VitClassifier(BaseLearner): #pl.LightningModule):
                 }
             )
 
-        with open("test_vit.json", "w") as f:
+        out_path: str = os.path.join(self.test_result_path, "result.json")
+        with open(out_path, "w") as f:
             json.dump(res, f, indent=2)
 
         
