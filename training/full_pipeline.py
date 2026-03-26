@@ -11,7 +11,7 @@ from utility.utility import BackboneType, HeadType
 from torch.utils.data import DataLoader
 
 
-def find_hyper_and_train_model(
+def find_vit_hyper_and_train_model(
     dataset_path: str, 
     experiment_out_path: str,
     trial_per_head: int = 5,
@@ -22,6 +22,28 @@ def find_hyper_and_train_model(
     use_countour: bool = False,
     head_type_esclusion: list[HeadType] = [HeadType.NONE, HeadType.SEQ_ENSEMBLE_CLS]
 ) -> BaseLearner:
+    """
+    Performs hyperparameter optimization and trains a Vision Transformer model.
+    
+    This function iterates through different classification head types, uses Optuna to find 
+    the best hyperparameters for each head type, saves the results, and then trains a final 
+    model using the best hyperparameters across all head types on the full dataset.
+    
+    Args:
+        dataset_path (str): Path to the directory containing the dataset.
+        experiment_out_path (str): Path where experiment results, checkpoints, and logs will be saved.
+        trial_per_head (int, optional): Number of Optuna trials per head type. Defaults to 5.
+        batch_size (int, optional): Batch size for data loading. Defaults to 256.
+        num_workers (int, optional): Number of workers for data loading. Defaults to 12.
+        sampler (bool, optional): Whether to use a custom sampler for data loading. Defaults to False.
+        use_masked_vit (bool, optional): Whether to use masked Vision Transformer. Defaults to False.
+        use_countour (bool, optional): Whether to use contour information. Defaults to False.
+        head_type_esclusion (list[HeadType], optional): Head types to exclude from optimization. 
+            Defaults to [HeadType.NONE, HeadType.SEQ_ENSEMBLE_CLS].
+    
+    Returns:
+        BaseLearner: The trained Vision Transformer model with optimal hyperparameters.
+    """
     
     best_loss: float | None = None
     best_trial: dict = {}
@@ -168,6 +190,27 @@ def test_model(
     model_chkt_path: str | None = None,
     model_hparams_path: str | None = None
 ) -> None:
+    """
+    Evaluates a model on a test dataset.
+    
+    This function tests a model on the provided test data. It can either use a model instance 
+    directly or load one from a checkpoint. Optionally, it logs the test loss and other metrics 
+    to a CSV logger for later analysis.
+    
+    Args:
+        test_data_loader (DataLoader): DataLoader for the test dataset.
+        test_result_path (str): Path where test results will be saved.
+        log_loss (bool, optional): Whether to log test loss and metrics to CSV. Defaults to False.
+        model (BaseLearner | None, optional): An instantiated model to use for testing. 
+            If None, the model will be loaded from checkpoint. Defaults to None.
+        model_chkt_path (str | None, optional): Path to the model checkpoint file. 
+            Required if model is None. Defaults to None.
+        model_hparams_path (str | None, optional): Path to the model hyperparameters file. 
+            Used when loading from checkpoint. Defaults to None.
+    
+    Returns:
+        None
+    """
     
     if model is None:
         model = BaseLearner.load_from_checkpoint(

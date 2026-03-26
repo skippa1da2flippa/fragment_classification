@@ -11,7 +11,7 @@ from dataset_handler.cleopatra_dist import get_dataset_weights
 from timm.models.vision_transformer import VisionTransformer
 from loss_function.supervised_contrastive_loss import SupConLoss
 from models_handler.base.base_learner import BaseLearner
-from utility.utility import BackboneType, CleopatraInput, CleopatraOut, HeadType
+from utility.utility import BackboneType, CleopatraEnsembleInput, CleopatraOut, HeadType
 from timm.models.vision_transformer import global_pool_nlc
 
 
@@ -140,8 +140,8 @@ class VitClassifier(BaseLearner):
             return_all=return_embedding
         )
     
-        data = emb[:, 0] if emb.dim() > 2 else emb
-        logits: Tensor = self.backbone.head(data)
+        global_token: Tensor = emb[:, 0] if emb.dim() > 2 else emb
+        logits: Tensor = self.backbone.head(global_token)
 
         if return_embedding: 
             return logits, emb
@@ -158,9 +158,7 @@ class VitClassifier(BaseLearner):
         # In this case the aggregation fun `global_pool_nlc()`
         # is called just onto the token which recieved
         # attention throughout the vit blocks
-        if (
-            self.hparams.masked_attention
-        ):
+        if self.hparams.masked_attention:
             return self.multi_task_forward(
                 batch=batch,
                 attention_mask=attention_mask
@@ -201,7 +199,7 @@ class VitClassifier(BaseLearner):
         return_all: bool = False
     ) -> Tensor:
         if attention_mask is None:
-            out: Tensor =  self.backbone.forward_features(
+            out: Tensor = self.backbone.forward_features(
                 x=batch
             )
 
@@ -263,24 +261,19 @@ class VitClassifier(BaseLearner):
         
         
     def base_step(
-            self, 
-            batch: CleopatraInput, 
-            step_type: str = "train"
-        ) -> CleopatraOut:
-        img, attention_mask, label = batch
+        self, 
+        batch: CleopatraEnsembleInput, 
+        step_type: str = "train"
+    ) -> CleopatraOut:
+        img, label, attention_mask, _ = batch
 
         weights = self.loss_weights if step_type == "train" else torch.ones_like(self.loss_weights) 
 
-        if self.hparams.masked_attention:
-            logits: Tensor = self(
-                batch=img, 
-                attention_mask=attention_mask
-            )
-        else: 
-            logits: Tensor = self(
-                batch=img
-            )
-           
+        logits: Tensor = self(
+            batch=img, 
+            attention_mask=attention_mask
+        )
+        
         if not self.hparams.contrastive_loss:
             loss: Tensor = F.cross_entropy(
                 input=logits, 
@@ -303,7 +296,7 @@ class VitClassifier(BaseLearner):
         )
 
 
-    def training_step(self, batch: CleopatraInput, batch_idx: int) -> Tensor:
+    def training_step(self, batch: CleopatraEnsembleInput, batch_idx: int) -> Tensor:
         loss, _, _, _ = self.base_step(batch)
         self.log(
             name="train_loss", 
@@ -316,7 +309,7 @@ class VitClassifier(BaseLearner):
         return loss
 
 
-    def validation_step(self, batch: CleopatraInput, batch_idx: int) -> None:
+    def validation_step(self, batch: CleopatraEnsembleInput, batch_idx: int) -> None:
         loss, logits, preds, labels = self.base_step(
             batch=batch, 
             step_type="val"
@@ -338,8 +331,8 @@ class VitClassifier(BaseLearner):
             self.val_f1.update(preds, labels)
             self.val_auc.update(logits, labels)
 
-    def test_step(self, batch: CleopatraInput, batch_idx: int) -> None:
-        loss, logits, preds, labels = self.base_step(
+    def test_step(self, batch: CleopatraEnsembleInput, batch_idx: int) -> None:
+        loss, logits, _, labels = self.base_step(
             batch=batch, 
             step_type="test"
         )
@@ -355,7 +348,7 @@ class VitClassifier(BaseLearner):
         )
 
         self.test_distribution.append(torch.softmax(logits, dim=1))
-        self.test_name.extend(batch[1]) # Assuming we have the name at postion one 
+        self.test_name.extend(batch.name) 
         self.test_labels.append(labels)
 
         

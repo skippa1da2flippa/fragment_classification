@@ -7,8 +7,9 @@ import numpy as np
 import os
 from glob import glob
 from dataset_handler.sampler import FixedBalancedBatchSampler, create_balanced_batches
-from utility.utility import CleopatraEnsembleInput, StyleDbOut, eval_transform, get_attention_mask, load_image, train_transform
+from utility.utility import CleopatraEnsembleInput, eval_transform, get_attention_mask, load_image, train_transform
 from torch import Tensor
+from PIL.Image import Image
 
 class StyleDataset(Dataset):
     """
@@ -32,7 +33,7 @@ class StyleDataset(Dataset):
         labels: list[str], 
         is_train: bool, 
         return_name: bool = False
-    ):
+    ) -> None:
         self.paths = paths
         unique_labels = np.unique(labels)
         self.n_styles = len(unique_labels)
@@ -42,21 +43,26 @@ class StyleDataset(Dataset):
         self.transform = train_transform() if is_train else eval_transform()
         self.return_name: bool = return_name
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.paths)
 
-    def __getitem__(self, idx):
-        rgba = load_image(self.paths[idx])
-        rgba = self.transform(rgba)  # Apply transform on full RGBA
-        image = rgba[:3]             # [3, 224, 224]
-        alpha = (rgba[3] > 0).unsqueeze(0)  # [1, 224, 224]
-        label = torch.tensor(self.labels[idx])
+    def __getitem__(self, idx: int) -> CleopatraEnsembleInput:
+        rgba: Image = load_image(self.paths[idx])
+        rgba_t: Tensor = self.transform(rgba)  # Apply transform on full RGBA
+        image: Tensor = rgba_t[:3]             # [3, 224, 224]
+        alpha: Tensor = (rgba_t[3] > 0).unsqueeze(0)  # [1, 224, 224]
+        label: Tensor = torch.tensor(self.labels[idx])
+
+        out: CleopatraEnsembleInput = CleopatraEnsembleInput(
+            image=image,
+            mask=alpha,
+            label=label
+        )
 
         if self.return_name:
-            return image, os.path.basename(self.paths[idx]), label
-        else:
-            return image, alpha, label
-        
+            out.name = os.path.basename(self.paths[idx])
+            
+        return out
 
 class StyleDatasetEnsemble(Dataset):
     """
@@ -79,7 +85,7 @@ class StyleDatasetEnsemble(Dataset):
         paths: list[list[str]], 
         labels: list[str], 
         is_train: bool, 
-        return_name: bool = False
+        return_name: bool = True
     ):
         self.paths = paths
         unique_labels = np.unique(labels)
@@ -93,7 +99,7 @@ class StyleDatasetEnsemble(Dataset):
     def __len__(self):
         return len(self.paths[0])
 
-    def __getitem__(self, idx: int) -> StyleDbOut:
+    def __getitem__(self, idx: int) -> CleopatraEnsembleInput:
 
         images: list[Tensor] = []
         alphas: list[Tensor] = []
@@ -112,9 +118,9 @@ class StyleDatasetEnsemble(Dataset):
             )
 
         label: Tensor = torch.tensor(self.labels[idx])
-        out: StyleDbOut = StyleDbOut(
-            images=images, 
-            alphas=alphas,
+        out: CleopatraEnsembleInput = CleopatraEnsembleInput(
+            image=images, 
+            mask=alphas,
             label=label
         )
 
@@ -125,15 +131,21 @@ class StyleDatasetEnsemble(Dataset):
     
     
 
-def masking_background_collate(batch, use_countourn=False):
-    images = []
-    alphas = []
-    labels = []
+def masking_background_collate(
+    batch: CleopatraEnsembleInput, 
+    use_countourn: bool = False
+) -> CleopatraEnsembleInput:
+    
+    images: list[Tensor] = []
+    alphas: list[Tensor] = []
+    labels: list[Tensor] = []
+    names: list[str] = []
 
-    for img, alpha, lbl in batch:
+    for img, lbl, alpha, name in batch:
         images.append(img)
         alphas.append(alpha)
         labels.append(lbl)
+        names.append(name)
 
     img_tensor = torch.stack(images)
     alpha_tensor = torch.stack(alphas)
@@ -144,13 +156,18 @@ def masking_background_collate(batch, use_countourn=False):
         use_countourn=use_countourn
     )
 
-    return img_tensor, attention_weights, lbl_tensor
+    return CleopatraEnsembleInput(
+        images=img_tensor,
+        mask=attention_weights,
+        label=lbl_tensor,
+        name=names
+    )
 
 class MaskingCollate:
-    def __init__(self, use_countourn=False):
-        self.use_countourn = use_countourn
+    def __init__(self, use_countourn: bool = False):
+        self.use_countourn: bool = use_countourn
 
-    def __call__(self, batch):
+    def __call__(self, batch) -> CleopatraEnsembleInput:
         return masking_background_collate(
             batch,
             use_countourn=self.use_countourn
@@ -158,7 +175,7 @@ class MaskingCollate:
 
 
 def ensemble_collate(
-    batch: list[StyleDbOut], 
+    batch: list[CleopatraEnsembleInput], 
     mask_on_db: int = 0,
     use_countourn: bool = False
 ) -> CleopatraEnsembleInput:
@@ -203,7 +220,7 @@ class EnsembleCollate:
         self.use_countourn: bool = use_countourn
         self.mask_on_db: int = mask_on_db
 
-    def __call__(self, batch: StyleDbOut) -> CleopatraEnsembleInput:
+    def __call__(self, batch: CleopatraEnsembleInput) -> CleopatraEnsembleInput:
         return ensemble_collate(
             batch=batch, 
             mask_on_db=self.mask_on_db,
@@ -388,7 +405,7 @@ class StyleEnsembleDataModule(pl.LightningDataModule):
         test_labels: list[list[int]],
         batch_size: int, 
         num_workers: int,
-        return_name: bool = False,
+        return_name: bool = True,
         masking_vit_on: int = 0,
         use_countourn: bool = False
     ):

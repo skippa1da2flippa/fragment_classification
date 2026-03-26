@@ -209,10 +209,10 @@ class BaseEnsemble(LightningModule):
     
     
     def base_step(
-            self, 
-            batch: CleopatraEnsembleInput, 
-            step_type: str = "train"
-        ) -> CleopatraOut:
+        self, 
+        batch: CleopatraEnsembleInput, 
+        step_type: str = "train"
+    ) -> CleopatraOut:
 
         losses: list[Tensor] = []
 

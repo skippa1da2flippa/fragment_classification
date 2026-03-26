@@ -32,6 +32,8 @@ class GraphEnsemble(BaseEnsemble):
         weight_decay: float = 0.003,
         mask_on_learner: int = 2,
         temperature: float = 0.9, 
+        edge_creation_mode: Literal["center", "upper"] = "center",
+        cosine_threshold: float = 0.7,
         keep_temperature_stable: bool = False
     ) -> None:
         
@@ -69,7 +71,9 @@ class GraphEnsemble(BaseEnsemble):
                 "gnn_act_fun": gnn_act_fun, 
                 "gnn_dropout": gnn_dropout,
                 "model_dataset_info": model_dataset_info,
-                "gnn_num_layer": gnn_num_layer  
+                "gnn_num_layer": gnn_num_layer, 
+                "edge_creation_mode": edge_creation_mode,
+                "cosine_threshold": cosine_threshold
             }
         )
 
@@ -124,7 +128,9 @@ class GraphEnsemble(BaseEnsemble):
                 temperature=self.temperature,
                 valid_patch_mask=torch.stack(valid_patch_mask), 
                 device=self.device, 
-                adapt_load_param=False
+                adapt_load_param=False,
+                edge_creation_mode=self.hparams.edge_creation_mode,
+                threshold=self.hparams.cosine_threshold
             )
 
         else:
@@ -136,7 +142,9 @@ class GraphEnsemble(BaseEnsemble):
                 device=self.device, 
                 mask_on_learner=self.hparams.mask_on_learner, 
                 central_node_mode=self.hparams.central_node_mode, 
-                adapt_load_param=False
+                adapt_load_param=False,
+                edge_creation_mode=self.hparams.edge_creation_mode,
+                threshold=self.hparams.cosine_threshold
             )
 
             step = (attention_mask.shape[1] * len(self.learners)) + 1

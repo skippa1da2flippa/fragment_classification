@@ -7,7 +7,7 @@ from torch_geometric.nn.models import GCN, GraphSAGE, GAT, GIN
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.data import Data, Batch
 from torchvision import transforms as T
-from PIL import Image
+from PIL.Image import Image
 import torch.nn.functional as F
 import torch.nn as nn
 import torchmetrics as tm
@@ -114,22 +114,22 @@ def get_patches_attention_weight(mask: Tensor, window_size: int = 16) -> Tensor:
     )
 
 
-def load_image(path):
+def load_image(path: str) -> Image:
     # Assume 'RGBA' and make sure the background is full of 0s (relevant for CLEOPATRA)
-    image = Image.open(path)
+    image: Image = Image.open(path)
     # If image has no alpha, create one (255 everywhere)
     if image.mode == "RGB":
         r, g, b = image.split()
-        alpha = Image.new("L", image.size, 255)
-        image = Image.merge("RGBA", (r, g, b, alpha))
+        alpha: Image = Image.new("L", image.size, 255)
+        image: Image = Image.merge("RGBA", (r, g, b, alpha))
 
     # Now image is guaranteed to be RGBA
     r, g, b, alpha = image.split()
 
     # Create RGB background for CLEOPATRA
-    rgb = Image.new('RGB', image.size, (0, 0, 0))
+    rgb: Image = Image.new('RGB', image.size, (0, 0, 0))
     rgb.paste(image, mask=alpha)
-    image = rgb
+    image: Image = rgb
 
     # Pad to square
     width, height = image.size
@@ -290,7 +290,7 @@ class CleopatraInput(NamedTuple):
   label: Tensor
 
 class CleopatraEnsembleInput(NamedTuple):
-  image: list[Tensor]
+  image: list[Tensor] | Tensor
   label: Tensor
   mask: Tensor 
   name: list[str] | None
@@ -301,11 +301,9 @@ class CleopatraOut(NamedTuple):
   prediction: Tensor
   label: Tensor
 
-class StyleDbOut(NamedTuple):
-    images: list[Tensor]
-    alphas: list[Tensor]
-    label: Tensor
-    name: str | None = None
+class CleopatraMultitaskOut(NamedTuple):
+    logits: list[Tensor]
+
 
 def make_metrics(num_classes: int):
     return MetricCollection({
@@ -513,7 +511,9 @@ def get_raw_edge_mask(
     temperature: Tensor, 
     load_param: float,
     adapt_load_param: bool = False,
-    valid_patch_mask: Tensor | None = None
+    valid_patch_mask: Tensor | None = None, 
+    mode: Literal["center", "upper"] = "center", 
+    threshold: float = 0.7
 ) -> tuple[Tensor, Tensor, Tensor , Tensor]:
     cosine_similarity, avg_cosine_sim, std_cosine_sim = get_cosine_stats(
         patches_emb=patches_emb, 
@@ -524,13 +524,16 @@ def get_raw_edge_mask(
     if adapt_load_param:
         load_param /= temperature
     
-    edge_mask: Tensor = (
-        avg_cosine_sim - std_cosine_sim * load_param 
-        <= cosine_similarity
-    ) & (
-        cosine_similarity
-        <= avg_cosine_sim + std_cosine_sim * load_param
-    ) 
+    if mode == "center":
+        edge_mask: Tensor = (
+            avg_cosine_sim - std_cosine_sim * load_param 
+            <= cosine_similarity
+        ) & (
+            cosine_similarity
+            <= avg_cosine_sim + std_cosine_sim * load_param
+        ) 
+    else:
+        edge_mask: Tensor = cosine_similarity > threshold
 
     if valid_patch_mask is not None:
         edge_mask &= ( # Removing unvalid tokens from the rows 
@@ -551,7 +554,9 @@ def generate_connection_discrete(
     temperature: nn.Parameter,
     valid_patch_mask: Tensor | None = None,
     device: str = "cuda", 
-    adapt_load_param: bool = False
+    adapt_load_param: bool = False, 
+    edge_creation_mode: Literal["center", "upper"] = "center",
+    threshold: float = 0.7
 ) -> GraphGenout:
     
     global_nodes: Tensor = torch.cat([patches_emb, other_global_nodes], dim=1)
@@ -577,7 +582,9 @@ def generate_connection_discrete(
         temperature=temperature,
         valid_patch_mask=valid_patch_mask,
         adapt_load_param=adapt_load_param, 
-        load_param=load_param
+        load_param=load_param, 
+        mode=edge_creation_mode,
+        threshold=threshold
     )
 
     edge_mask = add_central_nodes_connection(edge_mask=edge_mask)
@@ -616,7 +623,9 @@ def multiple_generate_connection_discrete(
     valid_patch_mask: Tensor | None = None,
     device: str = "cuda", 
     adapt_load_param: bool = False,
-    mask_on_learner: int = 2
+    mask_on_learner: int = 2, 
+    edge_creation_mode: Literal["center", "upper"] = "center",
+    threshold: float = 0.
 ) -> GraphGenout:
     
     global_nodes: Tensor = torch.cat(patches_emb, dim=1)
@@ -645,7 +654,9 @@ def multiple_generate_connection_discrete(
             temperature=temperature,
             valid_patch_mask=mask,
             adapt_load_param=adapt_load_param, 
-            load_param=load_param
+            load_param=load_param, 
+            mode=edge_creation_mode,
+            threshold=threshold
         )
 
         edge_masks.append(edge_mask)
