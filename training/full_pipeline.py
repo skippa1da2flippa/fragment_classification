@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any, Type, Callable
 import optuna
 from pytorch_lightning.loggers import CSVLogger
 import pytorch_lightning as pl
@@ -14,6 +15,11 @@ from torch.utils.data import DataLoader
 def find_vit_hyper_and_train_model(
     dataset_path: str, 
     experiment_out_path: str,
+    model_type: Type[BaseLearner],
+    optuna_function_wrapper: Callable[[Any], Callable[[optuna.Trial], float]],
+    optuna_wrapper_kwargs: dict[str, Any],
+    additional_param_key: list[str] | None = None, 
+    additional_model_params_f: dict[str, Callable[[Any], Any]] = {},
     trial_per_head: int = 5,
     batch_size: int = 256,
     num_workers: int = 12,
@@ -66,15 +72,10 @@ def find_vit_hyper_and_train_model(
 
         study = optuna.create_study(direction="minimize")  
         study.optimize(
-            func=just_a_wrapper(
-                model_type=BackboneType.VIT_16, 
-                datamodule=data_module, 
-                num_epoch=25, 
-                contrastive_loss=False, 
+            func=optuna_function_wrapper(
                 head_type=headtype,
-                masked_attention=False, 
-                backbone_class=VitClassifier, 
-                out_dir=experiment_out_path
+                datamodule=data_module,
+                **optuna_wrapper_kwargs
             ), 
             n_trials=trial_per_head, 
             n_jobs=1
@@ -100,16 +101,21 @@ def find_vit_hyper_and_train_model(
             best_trial = study.best_params
             best_head_type = headtype.name
 
+    additional_params: dict = {}
+    additional_model_params: dict = {}
     backbone_type = BackboneType.VIT_16.name
-    contrastive_loss = False
     full_dataset = True
     head_type = best_head_type
     k_classes = 11
     lr = best_trial["lr"]
-    masked_attention = False
     min_epochs_head = best_trial["min_epochs_head"]
     use_weighted_loss = best_trial["weighted_loss"]
     weight_decay = best_trial["weight_decay"]
+
+    for elem in additional_param_key or []:
+        additional_params[elem] = best_trial[elem]
+        # additional_model_params[elem] = additional_model_params_f[elem](best_trial[elem])
+        additional_model_params[elem] = additional_model_params_f[elem](best_trial)
 
     data_module = init_data_module(
         data_dir=dataset_path,
@@ -121,16 +127,17 @@ def find_vit_hyper_and_train_model(
         use_contourn=use_countour
     )
 
-    model = VitClassifier(
+    model = model_type(
         backbone_type=backbone_type,
         lr=lr,
         weight_decay=weight_decay,
         min_epochs_head=min_epochs_head,
         head_type=head_type,
         k_classes=k_classes, 
-        use_weighted_loss=use_weighted_loss, 
-        contrastive_loss=contrastive_loss, 
-        masked_attention=masked_attention
+        use_weighted_loss=use_weighted_loss,
+        masked_attention=use_masked_vit, 
+        **additional_params, 
+        **additional_model_params
     )
 
     base: str = os.path.join(experiment_out_path, "FINAL")

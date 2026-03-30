@@ -32,7 +32,7 @@ class StyleDataset(Dataset):
         paths: list[str], 
         labels: list[str], 
         is_train: bool, 
-        return_name: bool = False
+        return_name: bool = True
     ) -> None:
         self.paths = paths
         unique_labels = np.unique(labels)
@@ -56,11 +56,9 @@ class StyleDataset(Dataset):
         out: CleopatraEnsembleInput = CleopatraEnsembleInput(
             image=image,
             mask=alpha,
-            label=label
+            label=label, 
+            name=os.path.basename(self.paths[idx])
         )
-
-        if self.return_name:
-            out.name = os.path.basename(self.paths[idx])
             
         return out
 

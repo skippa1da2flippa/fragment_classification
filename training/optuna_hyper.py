@@ -2,11 +2,13 @@ import os
 from typing import Callable
 import optuna as op 
 import pytorch_lightning as pl
+import torch
 from models_handler.base.base_ensemble import BaseEnsemble
 from models_handler.ensemble.graph_ensemble import GraphEnsemble
 from models_handler.ensemble.weighted_avg_ensemble import WeightedAverageEnsemble
 from models_handler.frenziness.gnn import UltimateGraphApproach
-from utility.utility import BackboneType, GNNType, HeadType
+from models_handler.transformer.multi_task_vit import MultiTaskVit
+from utility.utility import BackboneType, GNNType, HeadType, get_epoch_per_style
 from models_handler.transformer.vit import VitClassifier
 from pytorch_lightning.loggers import CSVLogger
 
@@ -494,4 +496,92 @@ def ensemble_weighted_wrapper(
         score = checkpoint_cb.best_model_score.item() if checkpoint_cb.best_model_score else float("inf")
         return score
 
+    return objective
+
+
+def just_a_wrapper_multi_task(
+    model_type: BackboneType, 
+    head_type: HeadType,
+    datamodule: pl.LightningDataModule, 
+    out_dir: str,
+    backbone_class: type[pl.LightningModule] = MultiTaskVit,
+    num_epoch: int = 40, 
+    k_classes: int = 11,
+    masked_attention: bool = False,
+    device: str ="cuda"
+) -> Callable[[op.trial.Trial], float]:
+
+    def objective(trial: op.trial.Trial) -> float:
+        # Hyperparameter search space
+        backbone_type = model_type.name # trial.suggest_categorical("backbone_type", ["VIT_16", "DEIT_16"])
+        lr = trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+        weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
+        min_epochs_head = trial.suggest_int("min_epochs_head", 1, 10)
+        # trial.suggest_categorical("head_type", ["CLS_SINGLE", "SEQ_ENSEMBLE"])
+        k_classes = 11
+        
+        style_weight = trial.suggest_float("losses_weight", 0.3, 0.7)
+        
+        use_weighted_loss: bool = trial.suggest_categorical("weighted_loss", [True, False])
+
+        f_w_style = trial.suggest_float("fusion_w_style", 0.5, 2.0)
+        f_w_epoch = trial.suggest_float("fusion_w_epoch", 0.5, 2.0)
+        f_divisor = trial.suggest_float("fusion_divisor", 0.5, 3.0)
+        
+        fusion_params_tensor = torch.tensor([f_w_style, f_w_epoch, f_divisor])
+
+        # Create the model with the current set of hyperparameters
+        model = backbone_class(
+            backbone_type=backbone_type,
+            lr=lr,
+            weight_decay=weight_decay,
+            min_epochs_head=min_epochs_head,
+            head_type=head_type.name,
+            k_classes=k_classes, 
+            use_weighted_loss=use_weighted_loss, 
+            masked_attention=masked_attention, 
+            out_dim_add_task=[3], 
+            losses_weight=torch.tensor([style_weight, 1 - style_weight]),
+            label_getter=get_epoch_per_style,
+            fusion_params=fusion_params_tensor
+        )
+
+        # CSV logger
+        logger_csv = CSVLogger(
+            save_dir=os.path.join(f"{out_dir}", f"logs_{head_type.name}"),
+            name=f"csv",
+        )
+
+        check_point_saver = pl.callbacks.ModelCheckpoint(
+            dirpath=os.path.join(f"{out_dir}", f"checkpoints_{head_type.name}"), 
+            filename=f"weights", 
+            monitor='val_loss', 
+            mode='min'
+        )
+        early_stopping_cb = pl.callbacks.EarlyStopping(
+            monitor="val_loss",     # Metric to monitor
+            mode="min",             # "min" for loss, "max" for accuracy/F1
+            patience=5,             # Number of epochs with no improvement
+            min_delta=1e-3,         # Required improvement threshold
+            verbose=True
+        )
+
+        trainer = pl.Trainer(
+            max_epochs=num_epoch,
+            logger=logger_csv,
+            callbacks=[
+                check_point_saver,
+                early_stopping_cb
+            ],
+            enable_progress_bar=True,
+            accelerator=device
+        )
+
+        trainer.fit(
+            model=model, 
+            datamodule=datamodule
+        )
+
+        return check_point_saver.best_model_score.item()
+    
     return objective

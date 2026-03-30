@@ -7,7 +7,7 @@ from torch_geometric.nn.models import GCN, GraphSAGE, GAT, GIN
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.data import Data, Batch
 from torchvision import transforms as T
-from PIL.Image import Image
+from PIL import Image
 import torch.nn.functional as F
 import torch.nn as nn
 import torchmetrics as tm
@@ -19,6 +19,20 @@ mean3 = [0.485, 0.456, 0.406]
 mean4 = [0.485, 0.456, 0.406, 0] # Add 0 for the alpha channel
 std3 = [0.229, 0.224, 0.225]
 std4 = [0.229, 0.224, 0.225, 1] # Add 1 for the alpha channel
+
+style_mapping = {
+    "Byzantine": "middle",
+    "Cubism": "modern",
+    "Egyptian": "antique",
+    "Etruscan": "antique",
+    "Gothic": "middle",
+    "Greek": "antique",
+    "Impressionism": "modern",
+    "Prehistory": "antique",
+    "Renaissance": "middle",
+    "Roman": "antique",
+    "Surrealism": "modern"
+}
 
 # A function for reversing ImageNet normalization
 denormalize = T.Normalize(mean=[-m/s for m, s in zip(mean3, std3)], std=[1/s for s in std3])
@@ -114,9 +128,9 @@ def get_patches_attention_weight(mask: Tensor, window_size: int = 16) -> Tensor:
     )
 
 
-def load_image(path: str) -> Image:
+def load_image(path: str) -> Image.Image:
     # Assume 'RGBA' and make sure the background is full of 0s (relevant for CLEOPATRA)
-    image: Image = Image.open(path)
+    image: Image.Image = Image.open(path)
     # If image has no alpha, create one (255 everywhere)
     if image.mode == "RGB":
         r, g, b = image.split()
@@ -254,6 +268,16 @@ def generate_connection(
     )
 
 
+def get_epoch_per_style(label: Tensor) -> Tensor: # label is size (batch_size,) 
+    styles, epochs = get_style_labels()
+    result = []
+    for l in label:
+        style_name = styles[l.item()]
+        epoch_name = style_mapping[style_name]
+        epoch_idx = epochs.index(epoch_name)
+        result.append(epoch_idx)
+
+    return torch.tensor(result, device=label.device)
 
 
 """
@@ -292,7 +316,7 @@ class CleopatraInput(NamedTuple):
 class CleopatraEnsembleInput(NamedTuple):
   image: list[Tensor] | Tensor
   label: Tensor
-  mask: Tensor 
+  mask: Tensor | None
   name: list[str] | None
 
 class CleopatraOut(NamedTuple):
@@ -792,3 +816,7 @@ class ActFunEnum(Enum):
     GELU = nn.GELU
     TANH = nn.Tanh
     SIGMOID = nn.Sigmoid
+
+
+def get_style_labels(path: str = "dataset", path_epoch: str = "dataset_epoch") -> list[str]:
+    return os.listdir(os.path.join(path, "train")), os.listdir(os.path.join(path_epoch, "train"))
