@@ -11,14 +11,14 @@ class PatchWrapper(NamedTuple): # it's a node in bpt tree
     min_G: float        
     max_B: float
     min_B: float
-    color_range: float = -1
+    color_range: float
     perimeter: float 
     area: float
     lv: int 
-    coalition_member: set[int]
+    coalition_member: set[int] # id of the patch
     adjcent_coalition: set[int]
 
-class BPT_level:
+class BPT_level: # return this from function leaves are 0
     level_id: int
     nodes: list[PatchWrapper]
 
@@ -79,7 +79,7 @@ def from_double_to_one_coord(coord: tuple[int, int], max_row: int = 14) -> int:
 def remove_negative_coord(lst: list[tuple[int, int]]) -> list[tuple[int, int]]:
     final_coord: list[tuple[int, int]] = []
 
-    for idx in len(range(lst)):
+    for idx in range(len(lst)):
         x_coord, y_coord = lst[idx]
 
         if x_coord >= 0 and y_coord >= 0:
@@ -88,7 +88,7 @@ def remove_negative_coord(lst: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return final_coord
 
 
-def get_adjcent_patch_ids(actual_id: int, n_patch: int 14) -> list[int]:
+def get_adjcent_patch_ids(actual_id: int, n_patch: int = 14) -> list[int]:
     res: list[tuple[int, int]] = []
     x_coord, y_coord = from_one_to_double_coord(
         idx=actual_id, 
@@ -183,6 +183,29 @@ def compute_color_range(fst_patch: Tensor, sdn_patch: Tensor) -> float:
 
 # 1) Initialize the leaves with the patches wrapped in the object class `PatchWrapper` 
 #    (takes as input a list of patches and return a list of `PatchWrapper`)
+
+def leaves_wrapper(patches: list) -> list[PatchWrapper]:
+    wrappers = []
+    for patch_id, patch in enumerate(patches):
+        wrapper = PatchWrapper(
+            colation_type="patch",
+            coalition_id= patch_id,
+            max_R= patch[0].max().item(),
+            min_R= patch[0].min().item(),
+            max_G= patch[1].max().item(),
+            min_G= patch[1].min().item(),        
+            max_B= patch[2].max().item(),
+            min_B= patch[2].min().item(),
+            color_range = -1,
+            perimeter=patch.shape[1]*patch.shape[2], 
+            area= patch.shape[1]*4,
+            lv= 1,
+            coalition_member= {patch_id}, # id of the patch
+            adjcent_coalition= set(get_adjcent_patch_ids(actual_id = patch_id))
+        )
+        wrappers.append(wrapper)
+    return wrappers
+
 # 2) for each coaltion find the adjacent colations 
 #    (takes as input a `PatchWrapper` and populate the field `PatchWrapper`.adjacent_coalition)
 # 3) given the result at step 2) minimize the dist fucntion and create the new merged
