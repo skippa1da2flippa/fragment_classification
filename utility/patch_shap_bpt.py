@@ -3,7 +3,7 @@ from torch import Tensor
 
 class PatchWrapper(NamedTuple): # it's a node in bpt tree
     colation_type: Literal["patch", "coalition"]
-    colation_id: str
+    colation_id: int
     max_R: float
     min_R: float
     max_G: float
@@ -16,6 +16,15 @@ class PatchWrapper(NamedTuple): # it's a node in bpt tree
     lv: int 
     colation_member: set[int]
     adjcent_coalition: set[int]
+
+def color_range_f(r_channel: float, g_channel: float, b_channel: float) -> float:
+    return r_channel ** 2 + g_channel ** 2 + b_channel ** 2
+
+def get_patch_area(patch_size: int = 16) -> float:
+    patch_size ** 2
+
+def get_patch_perimeter(patch_size: int = 16) -> float:
+    patch_size * 4 
 
 def from_one_to_double_coord(idx: int, max_row: int = 14) -> tuple[int, int]:
     if max_row**2 <= idx:
@@ -30,26 +39,49 @@ def from_one_to_double_coord(idx: int, max_row: int = 14) -> tuple[int, int]:
 
     return row_idx, col_idx
 
+def from_double_to_one_coord(coord: tuple[int, int], max_row: int = 14) -> int:
+    x_coord, y_coord = coord
 
+    return (x_coord * max_row) + y_coord
+
+
+def remove_negative_coord(lst: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    final_coord: list[tuple[int, int]] = []
+
+    for idx in len(range(lst)):
+        x_coord, y_coord = lst[idx]
+
+        if x_coord >= 0 and y_coord >= 0:
+            final_coord.append(lst[idx])
+
+    return final_coord
 
 
 def get_adjcent_patch_ids(actual_id: int, n_patch: int 14) -> list[int]:
-    x_coord: int = actual_id // n_patch
-    y_coord: int = actual_id % n_patch
+    res: list[tuple[int, int]] = []
+    x_coord, y_coord = from_one_to_double_coord(
+        idx=actual_id, 
+        max_row=n_patch
+    )
+
+    for idx in range(x_coord - 1, x_coord + 2, 2):
+        for idj in range(y_coord - 1, y_coord + 2, 2):
+            res.append((
+                idx, idj
+            ))
+
+    filtered: list[tuple[int, int]] = remove_negative_coord(
+        lst=res
+    )
+
+    return [from_double_to_one_coord(coord) for coord in filtered]
 
 
+def merge(fst_coalition: PatchWrapper, sdn_coalition: PatchWrapper) -> PatchWrapper:
 
-    if actual_id < n_patch: # on the first row
-        
 
-    elif actual_id >= n_patch**2 - n_patch: # on the last row
-        pass
-
-    elif (actual_id + 1) % n_patch == 0: # on the side 
-        pass
-
-    else:
-        pass
+def get_adjacent_coalition(coalitions: list[PatchWrapper]) -> list[int]:
+    pass
 
 
 def initialize_partitions(patches: list[Tensor]) -> list[PatchWrapper]:
