@@ -1,9 +1,10 @@
 from typing import Literal, NamedTuple
 from torch import Tensor
+from math import sqrt
 
 class PatchWrapper(NamedTuple): # it's a node in bpt tree
     colation_type: Literal["patch", "coalition"]
-    colation_id: int
+    coalition_id: int
     max_R: float
     min_R: float
     max_G: float
@@ -14,8 +15,16 @@ class PatchWrapper(NamedTuple): # it's a node in bpt tree
     perimeter: float 
     area: float
     lv: int 
-    colation_member: set[int]
+    coalition_member: set[int]
     adjcent_coalition: set[int]
+
+class BPT_level:
+    level_id: int
+    nodes: list[PatchWrapper]
+
+class BPT:
+    levels: list[BPT_level]
+
 
 def color_range_f(r_channel: float, g_channel: float, b_channel: float) -> float:
     return r_channel ** 2 + g_channel ** 2 + b_channel ** 2
@@ -25,6 +34,28 @@ def get_patch_area(patch_size: int = 16) -> float:
 
 def get_patch_perimeter(patch_size: int = 16) -> float:
     patch_size * 4 
+
+def get_patch_distance(
+    r_channel: float, 
+    g_channel: float, 
+    b_channel: float, 
+    patch_size: int = 16    
+) -> float:
+    
+    color_range: float = color_range_f(
+        r_channel=r_channel, 
+        g_channel=g_channel, 
+        b_channel=b_channel
+    )
+
+    area: float = get_patch_area(
+        patch_size=patch_size
+    )
+    perimeter: float = get_patch_perimeter(
+        patch_size=patch_size
+    )
+
+    return color_range * area * sqrt(perimeter)
 
 def from_one_to_double_coord(idx: int, max_row: int = 14) -> tuple[int, int]:
     if max_row**2 <= idx:
@@ -76,9 +107,12 @@ def get_adjcent_patch_ids(actual_id: int, n_patch: int 14) -> list[int]:
 
     return [from_double_to_one_coord(coord) for coord in filtered]
 
+def get_chosen_pair(coalitions: list[PatchWrapper]):
+    for coalition in coalitions:
+        adj: list[int] = coalition.adjcent_coalition
 
 def merge(fst_coalition: PatchWrapper, sdn_coalition: PatchWrapper) -> PatchWrapper:
-
+    pass
 
 def get_adjacent_coalition(coalitions: list[PatchWrapper]) -> list[int]:
     pass
