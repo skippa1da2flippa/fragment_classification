@@ -5,18 +5,9 @@
 .vscode/
 
 # Data & outputs
-dataset/
-experiment_results/
-extrapolated_dataset/
-Original_artworks/
-/final_VIT 
-/Graph_ENSEMBLE_NEW 
-/Graph_ENSEMBLE_FINAL
-/Weighted_MLP_ENSEMBLE
-/Weighted_MLP_ENSEMBLE_NEW
-/gnn_ensemble_experiment 
-/masked_experiment
-/original_artwork_experiment
+datasets/
+FINAL_MODELS/
+EXPERIMENTS/
 
 # Python cache (recursive — covers ALL folders)
 __pycache__/
