@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Literal, NamedTuple
+from typing import Literal
 from torch import Tensor
 from math import sqrt
+
 
 @dataclass
 class PatchWrapper: # it's a node in bpt tree
@@ -16,9 +17,16 @@ class PatchWrapper: # it's a node in bpt tree
     color_range: float = -1
     perimeter: float 
     area: float
-    lv: int 
+    lv: int | None = None
     coalition_member: set[int]
-    adjcent_coalition: set[int]
+    adjacent_coalition: set[int]
+    kids: tuple[int, int] | None = None 
+
+    def __eq__(self, value: "PatchWrapper") -> bool:
+        return self.coalition_id == value.coalition_id
+    
+    def __len__(self) -> int:
+        return len(self.coalition_member)
 
 @dataclass
 class DistanceWrapper:
@@ -76,8 +84,8 @@ def get_common_perimeter(
     num_patches: int = 196
 ) -> float:
     
-    fst_presence_lst: set[int] = fst_coal.adjcent_coalition.copy()
-    sdn_presence_lst: set[int] = sdn_coal.adjcent_coalition.copy()
+    fst_presence_lst: set[int] = fst_coal.adjacent_coalition.copy()
+    sdn_presence_lst: set[int] = sdn_coal.adjacent_coalition.copy()
 
     fst_presence_lst.add(fst_coal.coalition_id)
     sdn_presence_lst.add(sdn_coal.coalition_id)
@@ -138,6 +146,7 @@ def get_coalition_distance(
     perimeter -= common_perimeter
 
     return color_range * area * sqrt(perimeter)
+    
 
 
 def from_one_to_double_coord(idx: int, max_row: int = 14) -> tuple[int, int]:
@@ -171,7 +180,7 @@ def remove_negative_coord(lst: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return final_coord
 
 
-def get_adjcent_patch_ids(actual_id: int, n_patch: int 14) -> list[int]:
+def get_adjcent_patch_ids(actual_id: int, n_patch: int = 14) -> list[int]:
     res: list[tuple[int, int]] = []
     x_coord, y_coord = from_one_to_double_coord(
         idx=actual_id, 
@@ -226,35 +235,67 @@ def find_best_pair(
     return res_helder
 
 
-def handle_duplication(
-    source_collector: dict[int, list[PatchWrapper]],
-    coal_collector: dict[int, list[PatchWrapper]] 
-) -> dict[int, PatchWrapper]:
+def get_merges(
+    source_collector: dict[int, list[tuple[PatchWrapper, float]]],
+    coal_collector: dict[int, list[tuple[PatchWrapper, float]]] 
+) -> tuple[dict[int, tuple[PatchWrapper, PatchWrapper, float]], set[int]]:
     
-    source_final: dict[int, PatchWrapper] = []
-    coal_final: dict[int, PatchWrapper] = []
+    final_out: dict[int, tuple[PatchWrapper, PatchWrapper, float]] = []
+    source_final: dict[int, tuple[PatchWrapper, float]] = []
+    coal_final: dict[int, tuple[PatchWrapper, float]] = []
+    available_source: set[int] = set() # TODO might be a problem 
+
+    max_coalition_id: int = max(coal_collector.keys())
+    actual_coalition_id: int = max_coalition_id + 1
 
     for key in source_collector:
-        sources: list[PatchWrapper] = source_collector[key]
+        sources: list[tuple[PatchWrapper, float]] = source_collector[key]
         source_final[key] = sources[0]
 
-        coal: list[PatchWrapper] = coal_collector[key]
+        coal: list[tuple[PatchWrapper, float]] = coal_collector[key]
         coal_final[key] = coal[0]
 
+        available_source.add(key)
+
+    for key in coal_final:
+        candidate_source: PatchWrapper = source_final[key][0]
+        candidate_coal: PatchWrapper = coal_final[candidate_source.coalition_id][0]
+
+        if key not in available_source:
+            continue
+
+        if candidate_coal == candidate_source:
+            available_source.remove(candidate_coal.coalition_id)
+            available_source.remove(candidate_source.coalition_id)
+
+            final_out[actual_coalition_id] = (candidate_source, candidate_coal, source_final[key][1])
+            actual_coalition_id += 1
+        
+        else:
+            for fall_back_cand, fall_back_distance in coal_collector[candidate_source.coalition_id][1:]:
+                fall_back_coal: PatchWrapper = fall_back_cand[0]
+                source_fall_back: PatchWrapper = source_final[fall_back_coal.coalition_id]
+
+                if fall_back_coal.coalition_id in available_source:
+                    if source_fall_back.coalition_id in available_source:
+                        if source_fall_back == candidate_source:
+                            available_source.remove(fall_back_coal.coalition_id)
+                            available_source.remove(candidate_source.coalition_id)
+
+                            final_out[actual_coalition_id] = (candidate_source, fall_back_coal, fall_back_distance)
+                            actual_coalition_id += 1
+                            break
+
     
+    return final_out, available_source
 
-    sorted_source = sorted(source_final.values(), key=lambda x: x.coalition_id)
-
-    pass
-
-def get_chosen_pair(bpt_level: BPT_level) -> dict[int, PatchWrapper]:
+def get_chosen_pair(bpt_level: BPT_level) -> tuple[dict[int, tuple[PatchWrapper, float]], list[PatchWrapper]]:
     coalitions: list[PatchWrapper] = bpt_level.nodes
     source_collector: dict[int, list[PatchWrapper]] = []
     coal_collector: dict[int, list[PatchWrapper]] = []
-    source_final: dict[int, PatchWrapper] = []
 
     for coalition in coalitions:
-        adj: list[int] = coalition.adjcent_coalition
+        adj: list[int] = coalition.adjacent_coalition
 
         candidates: list[PatchWrapper] = get_candidate_from_adj(
             candidates=coalitions,
@@ -271,30 +312,112 @@ def get_chosen_pair(bpt_level: BPT_level) -> dict[int, PatchWrapper]:
         for sort_cand, distance in sorted_candidates:
             if sort_cand.coalition_id in source_collector:
                 source_collector[sort_cand.coalition_id].append(
-                    coalition.coalition_id, 
-                    distance
+                    (coalition.coalition_id, distance)
                 )
             else:
                 source_collector[sort_cand.coalition_id] = [
                     (coalition.coalition_id, distance)
                 ]
 
-    source_final = handle_duplication(
-        source_final=source_final,
+    merges, available_source = get_merges(
+        coal_collector=coal_collector,
         source_collector=source_collector
     )
 
-    return source_final
+    leftout_nodes: list[PatchWrapper] = [
+        coal for coal_id in available_source for coal in coalitions if coal.coalition_id == coal_id
+    ]
+
+    return merges, leftout_nodes
 
 
+def merge(
+    fst_coalition: PatchWrapper, 
+    sdn_coalition: PatchWrapper, 
+    new_id: int, 
+    color_distance: float
+) -> PatchWrapper:
 
+    coalition_member: set[int] = fst_coalition.coalition_member.union(
+        sdn_coalition.coalition_member 
+    )
+    adjacent_coalition: set[int] = fst_coalition.adjacent_coalition.union(
+        sdn_coalition.adjacent_coalition 
+    )
 
+    max_R: float = max(
+        fst_coalition.max_R, sdn_coalition.max_R
+    )
+    min_R: float = min(
+        fst_coalition.min_R, sdn_coalition.min_R
+    )
+    max_G: float = max(
+        fst_coalition.max_G, sdn_coalition.max_G
+    )
+    min_G: float = min(
+        fst_coalition.min_G, sdn_coalition.min_G
+    )
+    max_B: float = max(
+        fst_coalition.max_B, sdn_coalition.max_B
+    )
+    min_B: float = min(
+        fst_coalition.min_B, sdn_coalition.min_B
+    )
 
-def merge(fst_coalition: PatchWrapper, sdn_coalition: PatchWrapper) -> PatchWrapper:
-    pass
+    area: float = fst_coalition.area + sdn_coalition.area
+    perimeter: float = fst_coalition.perimeter + sdn_coalition.perimeter
+    common_perimeter: float = get_common_perimeter(
+        fst_coal=fst_coalition,
+        sdn_coal=sdn_coalition
+    )
+    perimeter -= common_perimeter
 
+    return PatchWrapper(
+        colation_type="coalition",
+        coalition_id=new_id,
+        max_R=max_R,
+        min_R=min_R,
+        max_G=max_G,
+        min_G=min_G,
+        max_B=max_B,
+        min_B=min_B,
+        color_range=color_distance,
+        perimeter=perimeter,
+        area=area,
+        coalition_member=coalition_member,
+        adjacent_coalition=adjacent_coalition,
+        kids=(fst_coalition.coalition_id, sdn_coalition.coalition_id)
+    )
 
-def initialize_partitions(patches: list[Tensor]) -> list[PatchWrapper]:
+def get_new_level(bpt_level: BPT_level) -> BPT_level:
+    merges, leftout_nodes = get_chosen_pair(
+        bpt_level=bpt_level
+    )
+
+    new_nodes: list[PatchWrapper] = []
+
+    for coal_id in merges:
+        fst_coal, sdn_coal, color_distance = merges[coal_id]
+        new_node: PatchWrapper = merge(
+            fst_coalition=fst_coal,
+            sdn_coalition=sdn_coal,
+            new_id=coal_id,
+            color_distance=color_distance
+        )
+        new_nodes.append(
+            new_node
+        )
+
+    new_nodes.extend(leftout_nodes)
+
+    return BPT_level(
+        level_id=bpt_level.level_id + 1,
+        nodes=new_nodes,
+        min_node_id=min(merges.keys()),
+        max_node_id=max(merges.keys())
+    )
+
+def initialize_partitions(patches: list[Tensor]) -> BPT_level:
     res: list[PatchWrapper] = []
 
     for patch_id, patch in enumerate(patches):
@@ -314,60 +437,26 @@ def initialize_partitions(patches: list[Tensor]) -> list[PatchWrapper]:
                 min_B=min_flat[2], 
                 area=flattened_patch.shape[1],
                 perimeter=patch.shape[1] * 4, 
-                lv=len(patches), 
                 coalition_member=set([patch_id]),
-                adjcent_coalition=get_adjcent_patch_ids(patch_id)
+                adjacent_coalition=get_adjcent_patch_ids(patch_id)
             )
         )
 
-    return res
+    return BPT_level(
+        level_id=0,
+        nodes=res,
+        min_node_id=0,
+        max_node_id=len(patches) - 1
+    )
 
 
+def get_bpt_from_image(img_path: str) -> BPT:
+    # load image
+    # split the image in 196 patches of 16x16
+    # create a list of Tensor patches 
+    # call initialize_partitions to get the first level of the bpt
+    # while actual_BPT_level has more than 1 node:
+    #   get the new level with get_new_level
+    # return the BPT with all the levels
 
-def compute_color_range(fst_patch: Tensor, sdn_patch: Tensor) -> float:
-    """
-    Computes the color range between two patches.
-    
-    This function calculates the mean absolute difference in pixel values between two patches, 
-    which can be used as a measure of color range or variation between the two patches.
-    
-    Args:
-        fst_patch (Tensor): The first patch tensor of shape (C, H, W).
-        sdn_patch (Tensor): The second patch tensor of shape (C, H, W).
-    
-    Returns:
-        float: The computed color range between the two patches.
-    """
-    # Ensure the input tensors have the same shape
-    if fst_patch.shape != sdn_patch.shape:
-        raise ValueError("Input patches must have the same shape.")
-    
-    red_fst: Tensor = fst_patch[:, 0]
-    red_sdn: Tensor = sdn_patch[:, 0]
-    green_fst: Tensor = fst_patch[:, 1]
-    green_sdn: Tensor = sdn_patch[:, 1]
-    blue_fst: Tensor = fst_patch[:, 2]
-    blue_sdn: Tensor = sdn_patch[:, 2]
-    
-    flt_fst_patch: Tensor = fst_patch.flatten(start_dim=2)
-    flt_sdn_patch: Tensor = sdn_patch.flatten(start_dim=2)
-    
-    max_rgb: Tensor = flt_fst_patch.max(dim=2) - flt_sdn_patch.max(dim=2)
-    min_rgb: Tensor = flt_fst_patch.min(dim=2) - flt_sdn_patch.min(dim=2)
-  
-
-
-
-# 1) Initialize the leaves with the patches wrapped in the object class `PatchWrapper` 
-#    (takes as input a list of patches and return a list of `PatchWrapper`)
-# 2) for each coaltion find the adjacent colations 
-#    (takes as input a `PatchWrapper` and populate the field `PatchWrapper`.adjacent_coalition)
-# 3) given the result at step 2) minimize the dist fucntion and create the new merged
-#    object `PatchWrapper`
-# 4) go on like this until we reach the root
-
-
-# The result should be:
-# for each level of the tree we have a list of `PatchWrapper` object each representing
-# a given node of the tree at the desired level
-# so in the end we will have a `dict[int, list[PatchWrapper]]` which will represent a single fragment tree
+    pass
