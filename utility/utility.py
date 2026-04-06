@@ -58,6 +58,12 @@ def eval_transform(alpha=True):
         T.Normalize(mean=mean4, std=std4) if alpha else T.Normalize(mean=mean3, std=std3),
     ])
 
+def identity_transform():
+    return T.Compose([
+        T.Resize((224, 224)),
+        T.ToTensor(),
+    ])
+
 def get_dataset_cardinality(dataset_path: str, full_count: bool = True) -> dict[str, int]:
     res: dict[str, int] = {}
 
@@ -78,8 +84,24 @@ def get_dataset_cardinality(dataset_path: str, full_count: bool = True) -> dict[
             res[class_name] = res.get(class_name, 0) + class_cardinality
 
 
-
     return res
+
+def get_splitted_image(img: Tensor, window_size: int = 16) -> list[Tensor]:
+    img = img.squeeze(dim=1) if img.dim() > 3 else img
+    
+    num_step: int = img.shape[1] // window_size
+    patches: list[Tensor] = []
+
+    for num_patch_x in range(1, num_step + 1):
+        for num_patch_y in range(1, num_step + 1):
+            patch: Tensor = img[
+                :, 
+                (num_patch_x - 1) * window_size: num_patch_x * window_size,
+                (num_patch_y - 1) * window_size: num_patch_y * window_size
+            ]
+            patches.append(patch)
+
+    return patches
 
 def get_patches_attention_weight(mask: Tensor, window_size: int = 16) -> Tensor:
     mask = mask.squeeze(dim=1) if mask.dim() > 3 else mask
@@ -336,9 +358,14 @@ def make_metrics(num_classes: int):
         "auc": tm.AUROC(task="multiclass", num_classes=num_classes, average="macro"),
     })
 
-def load_from_image_to_tensor(img_path: str) -> tuple[Tensor, Tensor]:
+def load_from_image_to_tensor(img_path: str, identity: bool = False) -> tuple[Tensor, Tensor]:
     rgba = load_image(img_path)
-    rgba = eval_transform()(rgba)  # Apply transform on full RGBA
+
+    if not identity:
+        rgba = eval_transform()(rgba)  # Apply transform on full RGBA
+    else:
+        rgba = identity_transform()(rgba)
+    
     image = rgba[:3]             # [3, 224, 224]
     alpha = (rgba[3] > 0).unsqueeze(0)  # [1, 224, 224]
 

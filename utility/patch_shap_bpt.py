@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from typing import Literal
 from torch import Tensor
 from math import sqrt
-
+from utility.utility import get_splitted_image, load_from_image_to_tensor, load_image
+from PIL.Image import Image
 
 @dataclass
 class PatchWrapper: # it's a node in bpt tree
@@ -44,6 +45,7 @@ class BPT_level:
 @dataclass
 class BPT:
     levels: list[BPT_level]
+
 
 
 def color_range_f(r_channel: float, g_channel: float, b_channel: float) -> float:
@@ -243,7 +245,7 @@ def get_merges(
     final_out: dict[int, tuple[PatchWrapper, PatchWrapper, float]] = []
     source_final: dict[int, tuple[PatchWrapper, float]] = []
     coal_final: dict[int, tuple[PatchWrapper, float]] = []
-    available_source: set[int] = set() # TODO might be a problem 
+    available_source: set[int] = set()
 
     max_coalition_id: int = max(coal_collector.keys())
     actual_coalition_id: int = max_coalition_id + 1
@@ -413,8 +415,8 @@ def get_new_level(bpt_level: BPT_level) -> BPT_level:
     return BPT_level(
         level_id=bpt_level.level_id + 1,
         nodes=new_nodes,
-        min_node_id=min(merges.keys()),
-        max_node_id=max(merges.keys())
+        min_node_id=min(new_nodes, key=lambda x: x.coalition_id).coalition_id,
+        max_node_id=max(new_nodes, key=lambda x: x.coalition_id).coalition_id
     )
 
 def initialize_partitions(patches: list[Tensor]) -> BPT_level:
@@ -451,12 +453,34 @@ def initialize_partitions(patches: list[Tensor]) -> BPT_level:
 
 
 def get_bpt_from_image(img_path: str) -> BPT:
-    # load image
-    # split the image in 196 patches of 16x16
-    # create a list of Tensor patches 
-    # call initialize_partitions to get the first level of the bpt
-    # while actual_BPT_level has more than 1 node:
-    #   get the new level with get_new_level
-    # return the BPT with all the levels
 
-    pass
+    levels: list[BPT_level] = []
+
+    # load image
+    img: Tensor = load_from_image_to_tensor(
+        img_path=img_path, 
+        identity=True
+    )[0]
+
+    # split the image in 196 patches of 16x16
+    patches = get_splitted_image(img)
+
+    # call initialize_partitions to get the first level of the bpt
+    level_zero: BPT_level = initialize_partitions(patches=patches)
+    out_cond: bool = False
+
+    levels.append(level_zero)
+
+    while not out_cond:
+        new_level: BPT_level = get_new_level(
+            bpt_level=level_zero
+        )
+        if len(new_level.nodes) == 1:
+            out_cond = True
+        
+        levels = [new_level] + levels
+
+
+    return BPT(
+        levels=levels
+    )
