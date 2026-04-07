@@ -15,6 +15,7 @@ uv python pin <3.10.11>
 ```
 
 # Create environment and install dependencies
+Inside the project directory .../fragment_classification
 ```bash
 uv sync
 ```

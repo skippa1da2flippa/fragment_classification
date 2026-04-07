@@ -53,8 +53,8 @@ class PatchWrapper: # it's a node in bpt tree
         return {
             "colation_type": self.colation_type,
             "coalition_id": self.coalition_id,
-            "coalition_member": self.coalition_member,
-            "adjacent_coalition": self.adjacent_coalition,
+            "coalition_member": list(self.coalition_member),
+            "adjacent_coalition": list(self.adjacent_coalition),
             "max_R": self.max_R,
             "min_R": self.min_R,
             "max_G": self.max_G,
@@ -184,6 +184,7 @@ def get_patch_distance(
 
     return color_range * area * sqrt(perimeter)
 
+
 def get_common_perimeter(
     fst_coal: PatchWrapper, 
     sdn_coal: PatchWrapper,
@@ -191,23 +192,79 @@ def get_common_perimeter(
     num_patches: int = 196
 ) -> float:
     
-    fst_presence_lst: set[int] = fst_coal.adjacent_coalition.copy()
-    sdn_presence_lst: set[int] = sdn_coal.adjacent_coalition.copy()
+    shared_perimeter: int = 0
+    singular_perimeter_fst = 0
+    singular_perimeter_sdn = 0
 
-    fst_presence_lst.add(fst_coal.coalition_id)
+    # for singular variables:
+    # a) compute the intersection between 
+    #    `fst_coal.adjacent_coalition` and 
+    #    `sdn_coal.adjacent_coalition`
+    # b) for each element in the intersection:
+    #    1) compute the candidates in the cross pattern
+    #    2) for each candidate in the cross pattern:
+    #    3)   if a candiate belong to fst_coal increment singular_perimeter_fst
+    #    4)   if a candiate belong to sdn_coal increment singular_perimeter_sdn
+    #    5) if all the candidates does NOT belonged to either fst_coal or sdn_coal then
+    #       reset the counters singular_perimeter_fst, singular_perimeter_sdn to the previous values
 
-    coalition_common: set[int] = fst_coal.coalition_member.intersection(
+    patches_list: list[int] = list(range(num_patches))
+
+    coalition_common_fst: set[int] = fst_coal.coalition_member.intersection(
         sdn_coal.adjacent_coalition
+    ).intersection(
+        patches_list
     )
-    patches_common: set[int] = coalition_common.intersection(
-        list(range(num_patches))
+    coalition_common_sdn: set[int] = sdn_coal.coalition_member.intersection(
+        fst_coal.adjacent_coalition
+    ).intersection(
+        patches_list
     )
-    
-    common_perimeter: float = len(
-        patches_common
-    ) * window_size
+    adjacent_common_coalition: set[int] = fst_coal.adjacent_coalition.intersection(
+        sdn_coal.adjacent_coalition
+    ).difference(
+        fst_coal.coalition_member.union(sdn_coal.coalition_member)
+    ).intersection(
+        patches_list
+    )
 
-    return common_perimeter
+    if len(coalition_common_fst) < len(coalition_common_sdn):
+        chosen_coalition: set[int] = coalition_common_fst
+        other_coalition: set[int] = coalition_common_sdn
+    else:
+        chosen_coalition: set[int] = coalition_common_sdn
+        other_coalition: set[int] = coalition_common_fst 
+
+    for col_id in chosen_coalition:
+        candidates: list[int] = get_cross_pattern(
+            coalition_id=col_id
+        )
+        for cand_id in candidates:
+            if cand_id in other_coalition:
+                shared_perimeter += 1
+
+    for col_id in adjacent_common_coalition:
+        candidates: list[int] = get_cross_pattern(
+            coalition_id=col_id
+        )
+        flag: bool = True
+        temp_singular_perimeter_fst: int = 0
+        temp_singular_perimeter_sdn: int = 0
+        for cand_id in candidates:
+            if cand_id in fst_coal.coalition_member:
+                temp_singular_perimeter_fst += 1
+            elif cand_id in sdn_coal.coalition_member:
+                temp_singular_perimeter_sdn += 1
+            else:
+                flag = False
+
+        if flag:
+            singular_perimeter_fst += temp_singular_perimeter_fst
+            singular_perimeter_sdn += temp_singular_perimeter_sdn
+
+    common_perimeter: float = shared_perimeter * window_size
+
+    return 2 * common_perimeter + singular_perimeter_fst + singular_perimeter_sdn
 
 
 def get_coalition_distance(
@@ -248,9 +305,20 @@ def get_coalition_distance(
     )
     perimeter -= common_perimeter
 
+    if perimeter < 0:
+        raise ValueError(
+            "The perimeter got negative inside the merge"
+        )
+
     return color_range * area * sqrt(perimeter)
     
 
+def get_cross_pattern(coalition_id: int) -> list[int]:
+    x, y = from_one_to_double_coord(coalition_id)
+    candidates: list[tuple[int, int]] = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+    candidates = remove_negative_coord(candidates)
+
+    return [from_double_to_one_coord(cand) for cand in candidates]
 
 def from_one_to_double_coord(idx: int, max_row: int = 14) -> tuple[int, int]:
     if max_row**2 <= idx:
@@ -311,10 +379,15 @@ def get_candidate_from_adj(
 
     for adj_id in adjacent_ids:
         for cand in candidates:
-            if adj_id == cand.coalition_id:
+            if adj_id == cand.coalition_id or adj_id in cand.coalition_member:
                 chosen.append(
                     cand
                 )
+
+                break
+
+    if len(chosen) == 0:
+        raise ValueError("something went wrong a node does not have neighbors")
 
     return chosen
 
@@ -402,7 +475,6 @@ def get_chosen_pair(bpt_level: BPT_level) -> tuple[dict[int, tuple[PatchWrapper,
     for coalition in coalitions:
         adj: list[int] = coalition.adjacent_coalition
 
-        # TODO ERRORE al level = 1 (definizione secondo livello) candidates è vuoto
         candidates: list[PatchWrapper] = get_candidate_from_adj(
             candidates=coalitions,
             adjacent_ids=adj
@@ -455,6 +527,8 @@ def merge(
     )
     adjacent_coalition: set[int] = fst_coalition.adjacent_coalition.union(
         sdn_coalition.adjacent_coalition 
+    ).difference(
+        coalition_member
     )
 
     max_R: float = max(
@@ -482,7 +556,13 @@ def merge(
         fst_coal=fst_coalition,
         sdn_coal=sdn_coalition
     )
-    perimeter -= 2*common_perimeter
+    perimeter -= common_perimeter
+
+    if perimeter < 0:
+        raise ValueError(
+            "The perimeter got negative inside the merge"
+            f"for the new id: {new_id}"
+        )
 
     return PatchWrapper(
         colation_type="coalition",
@@ -542,12 +622,12 @@ def initialize_partitions(patches: list[Tensor]) -> BPT_level:
             PatchWrapper(
                 colation_type="patch", 
                 coalition_id=patch_id, 
-                max_R=max_flat[0], 
-                min_R=min_flat[0], 
-                max_G=max_flat[1], 
-                min_G=min_flat[1], 
-                max_B=max_flat[2], 
-                min_B=min_flat[2], 
+                max_R=max_flat[0].item(), 
+                min_R=min_flat[0].item(), 
+                max_G=max_flat[1].item(), 
+                min_G=min_flat[1].item(), 
+                max_B=max_flat[2].item(), 
+                min_B=min_flat[2].item(), 
                 area=flattened_patch.shape[1],
                 perimeter=patch.shape[1] * 4, 
                 coalition_member=set([patch_id]),
@@ -618,5 +698,5 @@ def single_pipeline_bpt(in_img_path: str, out_json_path: str) -> None:
     bpt: BPT = get_bpt_from_image(img_path=in_img_path)
     save_bpt_to_json(
         bpt=bpt, 
-        out_json_path=out_json_path
+        path=out_json_path
     )
