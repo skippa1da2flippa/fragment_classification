@@ -1,10 +1,12 @@
 import json
 from dataclasses import dataclass
+import os
 from typing import Literal
 from torch import Tensor
 from math import sqrt
 from tqdm import tqdm
-from utility.utility import get_splitted_image, load_from_image_to_tensor, load_image
+from utility.utility import get_splitted_image, load_from_image_to_tensor
+
 
 @dataclass
 class PatchWrapper: # it's a node in bpt tree
@@ -88,14 +90,9 @@ class PatchWrapper: # it's a node in bpt tree
             kids=tuple(data["kids"]) if data.get("kids") is not None else None,
         )
 
-@dataclass
-class DistanceWrapper:
-    fst_coal: PatchWrapper
-    sdn_coal: PatchWrapper
-    distance: float
 
 @dataclass
-class BPT_level:
+class BptLevel:
     level_id: int
     nodes: list[PatchWrapper]
     min_node_id: int
@@ -110,7 +107,7 @@ class BPT_level:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "BPT_level":
+    def from_dict(cls, data: dict) -> "BptLevel":
         return cls(
             level_id=data["level_id"],
             nodes=[PatchWrapper.from_dict(node) for node in data["nodes"]],
@@ -120,26 +117,29 @@ class BPT_level:
 
 @dataclass
 class BPT:
-    levels: list[BPT_level]
     total_nodes: int 
     total_leaves: int
     height: int
+    levels: list[BptLevel]
+    image_name: str | None = None
 
     def to_dict(self) -> dict:
         return {
-            "levels": [level.to_dict() for level in self.levels],
+            "image_name": self.image_name,
             "total_nodes": self.total_nodes,
             "total_leaves": self.total_leaves,
             "height": self.height,
+            "levels": [level.to_dict() for level in self.levels]
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "BPT":
         return cls(
-            levels=[BPT_level.from_dict(level) for level in data["levels"]],
+            levels=[BptLevel.from_dict(level) for level in data["levels"]],
             total_nodes=data["total_nodes"],
             total_leaves=data["total_leaves"],
             height=data["height"],
+            image_name=data["image_name"]
         )
 
 
@@ -467,7 +467,7 @@ def get_merges(
     
     return final_out, available_source
 
-def get_chosen_pair(bpt_level: BPT_level) -> tuple[dict[int, tuple[PatchWrapper, float]], list[PatchWrapper]]:
+def get_chosen_pair(bpt_level: BptLevel) -> tuple[dict[int, tuple[PatchWrapper, float]], list[PatchWrapper]]:
     coalitions: list[PatchWrapper] = bpt_level.nodes
     source_collector: dict[int, list[PatchWrapper]] = {}
     coal_collector: dict[int, list[PatchWrapper]] = {}
@@ -582,7 +582,7 @@ def merge(
         lv=fst_coalition.lv + 1 if fst_coalition.lv is not None else None
     )
 
-def get_new_level(bpt_level: BPT_level) -> BPT_level:
+def get_new_level(bpt_level: BptLevel) -> BptLevel:
     merges, leftout_nodes = get_chosen_pair(
         bpt_level=bpt_level
     )
@@ -603,14 +603,14 @@ def get_new_level(bpt_level: BPT_level) -> BPT_level:
 
     new_nodes.extend(leftout_nodes)
 
-    return BPT_level(
+    return BptLevel(
         level_id=bpt_level.level_id + 1,
         nodes=new_nodes,
         min_node_id=min(new_nodes, key=lambda x: x.coalition_id).coalition_id,
         max_node_id=max(new_nodes, key=lambda x: x.coalition_id).coalition_id
     )
 
-def initialize_partitions(patches: list[Tensor]) -> BPT_level:
+def initialize_partitions(patches: list[Tensor]) -> BptLevel:
     res: list[PatchWrapper] = []
 
     for patch_id, patch in enumerate(patches):
@@ -636,7 +636,7 @@ def initialize_partitions(patches: list[Tensor]) -> BPT_level:
             )
         )
 
-    return BPT_level(
+    return BptLevel(
         level_id=0,
         nodes=res,
         min_node_id=0,
@@ -646,7 +646,7 @@ def initialize_partitions(patches: list[Tensor]) -> BPT_level:
 
 def get_bpt_from_image(img_path: str) -> BPT:
 
-    levels: list[BPT_level] = []
+    levels: list[BptLevel] = []
     total_nodes: int = 0
 
     # load image
@@ -659,17 +659,17 @@ def get_bpt_from_image(img_path: str) -> BPT:
     patches: list[Tensor] = get_splitted_image(img)
 
     # call initialize_partitions to get the first level of the bpt
-    level_zero: BPT_level = initialize_partitions(patches=patches)
+    level_zero: BptLevel = initialize_partitions(patches=patches)
     total_nodes += len(level_zero.nodes)
     levels.append(level_zero)
 
     out_cond: bool = False
-    prev_level: BPT_level = level_zero
+    prev_level: BptLevel = level_zero
     initial_nodes: int = len(level_zero.nodes)
     
     with tqdm(total=initial_nodes - 1, desc="Building BPT levels") as progress:
         while not out_cond:
-            new_level: BPT_level = get_new_level(
+            new_level: BptLevel = get_new_level(
                 bpt_level=prev_level
             )
             nodes_reduced: int = len(prev_level.nodes) - len(new_level.nodes)
@@ -695,7 +695,11 @@ def get_bpt_from_image(img_path: str) -> BPT:
 
 
 def single_pipeline_bpt(in_img_path: str, out_json_path: str) -> None:
+    image_name: str = os.path.basename(in_img_path)
+
     bpt: BPT = get_bpt_from_image(img_path=in_img_path)
+    bpt.image_name = image_name
+
     save_bpt_to_json(
         bpt=bpt, 
         path=out_json_path
