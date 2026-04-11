@@ -441,7 +441,7 @@ def get_merges(
         if key not in available_source:
             continue
 
-        if candidate_source.coalition_id == key:
+        if candidate_source.coalition_id == key and candidate_coal.coalition_id in available_source:
             available_source.remove(candidate_coal.coalition_id)
             available_source.remove(candidate_source.coalition_id)
 

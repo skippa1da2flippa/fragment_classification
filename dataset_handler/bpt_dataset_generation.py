@@ -14,10 +14,8 @@ def process_one_directory(input_dir: str, output_dir: str) -> None:
             single_pipeline_bpt(img_path, json_path)
 
 
-def get_bpt_dataset(dataset_path: str, output_path: str) -> None:
-    splits = ['train', 'valid', 'test']
-    
-    for split in splits:
+def get_bpt_dataset(dataset_path: str, output_path: str) -> None:   
+    for split in os.listdir(dataset_path):
         split_path = os.path.join(dataset_path, split)
         if not os.path.exists(split_path):
             continue
