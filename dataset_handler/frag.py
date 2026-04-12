@@ -8,7 +8,7 @@ from glob import glob
 from dataset_handler.sampler import FixedBalancedBatchSampler, create_balanced_batches
 from utility.patch_shap_bpt import BPT
 from utility.tree_operation import get_adjacency_from_BPT
-from utility.utility import BptEnsembleDatasetInput, BptEnsembleDatasetPre, CleopatraEnsembleInput, eval_transform, get_attention_mask, load_image, load_json, train_transform
+from utility.utility import BptEnsembleInput, BptEnsembleDatasetPre, CleopatraEnsembleInput, eval_transform, get_attention_mask, load_image, load_json, train_transform
 from torch import Tensor
 from PIL.Image import Image
 
@@ -41,7 +41,7 @@ class StyleDataset(Dataset):
         if 0 not in unique_labels:
             labels = [l - 1 for l in labels] # 1-indexed to 0-indexed
         self.labels = labels
-        self.transform = train_transform() if is_train else eval_transform()
+        self.transform = train_transform(False) if is_train else eval_transform()
         self.return_name: bool = return_name
 
     def __len__(self) -> int:
@@ -288,7 +288,7 @@ def bpt_ensemble_collate(
     use_countourn: bool = False,
     bpt_percentage: float = 0.3,
     bpt_margin: float = 0.1
-) -> BptEnsembleDatasetInput:
+) -> BptEnsembleInput:
 
     alpha_t: list[list[Tensor]] = [[] for _ in range(len(batch))]
     img_t: list[list[Tensor]] = [[] for _ in range(len(batch[0].images))]
@@ -321,7 +321,7 @@ def bpt_ensemble_collate(
     )
 
 
-    return BptEnsembleDatasetInput(
+    return BptEnsembleInput(
         image=[torch.stack(imgs) for imgs in img_t],
         label=torch.stack(lbl_t), 
         bpt_info=[torch.stack(trees) for trees in bpt_t],
@@ -362,7 +362,7 @@ class BptEnsembleCollate:
         self.bpt_percentage: float = bpt_percentage,
         self.bpt_margin: float = bpt_margin
 
-    def __call__(self, batch: list[BptEnsembleDatasetPre]) -> BptEnsembleDatasetInput:
+    def __call__(self, batch: list[BptEnsembleDatasetPre]) -> BptEnsembleInput:
         return bpt_ensemble_collate(
             batch=batch, 
             mask_on_db=self.mask_on_db,
@@ -370,7 +370,6 @@ class BptEnsembleCollate:
             bpt_percentage=self.bpt_percentage,
             bpt_margin=self.bpt_margin
         )
-
 
 
 

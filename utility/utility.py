@@ -1,4 +1,5 @@
 from enum import Enum
+import json
 import os
 from typing import Literal, NamedTuple
 from torch import Tensor, bmm, ones
@@ -12,7 +13,10 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torchmetrics as tm
 from torchmetrics import MetricCollection
+import random
+from utility.patch_shap_bpt import BPT
 
+random.seed(42)
 
 # ImageNet normalization
 mean3 = [0.485, 0.456, 0.406]
@@ -329,23 +333,46 @@ class HeadType(Enum):
   SEQ_ENSEMBLE_CLS = "map"
   NONE = ""
 
+class BptEnsembleDatasetPre(NamedTuple):
+    image: list[Tensor]
+    label: Tensor
+    name: list[str]
+    bpt_info: list[BPT]
+    mask: Tensor
+
+class BptEnsembleInput(NamedTuple):
+    image: list[Tensor] | Tensor
+    label: Tensor
+    mask: Tensor
+    bpt_info: list[Tensor]
+    name: list[str]
+
+class EnsembleForwardInput(NamedTuple):
+    batch_lst: list[Tensor]
+    bpt_info: list[Tensor] | None = None
+    attention_mask: Tensor | None = None
+
+class EnsembleForwardOut(NamedTuple):
+    ensemble_logits: Tensor
+    learners_logits: Tensor
+    additional_log: dict | None = None
 
 class CleopatraInput(NamedTuple):
-  image: Tensor
-  mask: Tensor
-  label: Tensor
+    image: Tensor
+    mask: Tensor
+    label: Tensor
 
 class CleopatraEnsembleInput(NamedTuple):
-  image: list[Tensor] | Tensor
-  label: Tensor
-  mask: Tensor | None
-  name: list[str] | None
+    image: list[Tensor] | Tensor
+    label: Tensor
+    mask: Tensor | None
+    name: list[str] | None
 
 class CleopatraOut(NamedTuple):
-  loss: Tensor
-  logits: Tensor
-  prediction: Tensor
-  label: Tensor
+    loss: Tensor
+    logits: Tensor
+    prediction: Tensor
+    label: Tensor
 
 class CleopatraMultitaskOut(NamedTuple):
     logits: list[Tensor]
@@ -409,6 +436,13 @@ def pairwise_kl(
         return kl + kl_rev
 
     return kl
+
+
+def load_json(path: str) -> dict:
+    with open(path, "r", encoding="utf-8") as f:
+        data: dict = json.load(f)
+
+    return data
 
 
 def kl_similarity(
@@ -560,7 +594,7 @@ def compute_graph_stats(adjacency: Tensor, valid_patch_mask: Tensor | None) -> t
 def get_raw_edge_mask(
     patches_emb: Tensor, 
     temperature: Tensor, 
-    load_param: float,
+    load_param: float = 0.5,
     adapt_load_param: bool = False,
     valid_patch_mask: Tensor | None = None, 
     mode: Literal["center", "upper"] = "center", 
@@ -603,11 +637,12 @@ def generate_connection_discrete(
     central_node_mode: Literal["mean", "zero"],
     load_param: float,
     temperature: nn.Parameter,
+    bpt_adjacency: Tensor | None = None,
     valid_patch_mask: Tensor | None = None,
-    device: str = "cuda", 
     adapt_load_param: bool = False, 
-    edge_creation_mode: Literal["center", "upper"] = "center",
-    threshold: float = 0.7
+    edge_creation_mode: Literal["center", "upper"] = "upper",
+    threshold: float = 0.7,
+    device: str = "cuda"
 ) -> GraphGenout:
     
     global_nodes: Tensor = torch.cat([patches_emb, other_global_nodes], dim=1)
@@ -638,6 +673,9 @@ def generate_connection_discrete(
         threshold=threshold
     )
 
+    if bpt_adjacency is not None:
+        edge_mask &= bpt_adjacency.bool()
+
     edge_mask = add_central_nodes_connection(edge_mask=edge_mask)
     
     diagonal_mask = torch.tensor(
@@ -666,17 +704,19 @@ def generate_connection_discrete(
         graph_edges_cardinality=graph_card
     )
 
+
 def multiple_generate_connection_discrete(
     patches_emb: list[Tensor], 
     load_param: float,
     temperature: nn.Parameter,
     central_node_mode: Literal["mean", "zero"],
     valid_patch_mask: Tensor | None = None,
-    device: str = "cuda", 
+    bpt_adj: list[Tensor] | None = None,
     adapt_load_param: bool = False,
     mask_on_learner: int = 2, 
-    edge_creation_mode: Literal["center", "upper"] = "center",
-    threshold: float = 0.
+    edge_creation_mode: Literal["center", "upper"] = "upper",
+    threshold: float = 0.7,
+    device: str = "cuda"
 ) -> GraphGenout:
     
     global_nodes: Tensor = torch.cat(patches_emb, dim=1)
@@ -710,10 +750,14 @@ def multiple_generate_connection_discrete(
             threshold=threshold
         )
 
+        if bpt_adj is not None:
+            edge_mask &= bpt_adj[idx]
+
         edge_masks.append(edge_mask)
         avg_cos_sims.append(avg_cosine_sim.view(-1))
         std_cos_sims.append(std_cosine_sim.view(-1))
 
+    # TODO this function might be the culprit for the vram downfall
     edge_mask: Tensor = unify_edge_mask(edge_masks=edge_masks)
 
     edge_mask = add_central_nodes_connection(
@@ -748,34 +792,35 @@ def multiple_generate_connection_discrete(
         graph_edges_cardinality=graph_card
     )
 
+
+
 def get_least_idx(ensamble_prediction_t: Tensor, most_used_values: Tensor) -> Tensor:
 
     least_used_map: Tensor = ensamble_prediction_t != most_used_values.unsqueeze(dim=-1)
 
     # reverse order of each row and then argmax to get the first True
-    rev_idx = torch.flip(least_used_map, dims=[1]).int().argmax(dim=1)
+    rev_idx: Tensor = torch.flip(least_used_map, dims=[1]).int().argmax(dim=1)
     # convert back the reversed index to its real position
-    last_idx = least_used_map.size(1) - 1 - rev_idx
+    last_idx: Tensor = least_used_map.size(1) - 1 - rev_idx
 
-    # assign the last learner to the rows with no True
-    no_true = ~least_used_map.any(dim=1)
-    last_idx[no_true] = ensamble_prediction_t.shape[1] - 1
+    # assign a random learner to the rows with no True
+    no_true: Tensor = ~least_used_map.any(dim=1)
+    last_idx[no_true] = random.randint(0, ensamble_prediction_t.shape[1] - 1)
 
     return last_idx
 
 def get_basked_representation(
     ensemble_logits_t: Tensor, 
     ensemble_patches_t: Tensor,
-    choice: Literal["least", "most", "merge"] = "least"
+    choice: Literal["least", "most"] = "least"
 ) -> tuple[Tensor, Tensor, Tensor]:
     
-    ensemble_logits_t = ensemble_logits_t.argmax(dim=-1) # b x n_models
-
-    most_used_values, chosen_idx = torch.mode(ensemble_logits_t, dim=-1)
+    ensemble_prediction: Tensor = ensemble_logits_t.argmax(dim=-1) # b x n_models
+    most_used_values, chosen_idx = torch.mode(ensemble_prediction, dim=-1)
     
     if choice == "least":
         chosen_idx = get_least_idx(
-            ensamble_prediction_t=ensemble_logits_t, 
+            ensamble_prediction_t=ensemble_prediction, 
             most_used_values=most_used_values
         )
 
@@ -785,7 +830,7 @@ def get_basked_representation(
         
     nodes_ids: Tensor = torch.tensor(
         data=[
-            x for x in range(ensemble_logits_t.shape[1])
+            x for x in range(ensemble_prediction.shape[1])
         ], 
         device=ensemble_patches_t.device
     ) 
@@ -828,11 +873,6 @@ def unify_edge_mask(edge_masks: list[Tensor]) -> Tensor:
         dim=1
     )
 
-
-class EnsembleForwardOut(NamedTuple):
-    ensemble_logits: Tensor
-    learners_logits: Tensor
-    additional_log: dict | None = None
 
 class LearnerForwardOut(NamedTuple):
     learners_logits: list[Tensor] | Tensor

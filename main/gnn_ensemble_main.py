@@ -13,6 +13,8 @@ from training.optuna_hyper import ensemble_graph_wrapper
 
 if __name__ == "__main__":
 
+    mask_on_learner: int = 2
+
     data_module = init_data_module_ensemble(
         data_dirs=[
             "dataset", 
@@ -112,8 +114,8 @@ if __name__ == "__main__":
         keep_temperature_stable=True,
         gnn_dropout=0.5311684635834418,
         gnn_act_fun="gelu", 
-        central_node_mode="zero"
-
+        central_node_mode="zero",
+        mask_on_learner=mask_on_learner
     )
 
     base = "Graph_ENSEMBLE_FINAL"

@@ -4,9 +4,9 @@ from torch import Tensor
 from typing import Literal, Type
 from models_handler.base.base_ensemble import BaseEnsemble
 from models_handler.base.base_learner import BaseLearner
-from utility.utility import EnsembleForwardOut, GNNType, GraphGenout, generate_connection_discrete, get_basked_representation, multiple_generate_connection_discrete
+from utility.utility import EnsembleForwardInput, EnsembleForwardOut, GNNType, GraphGenout, generate_connection_discrete, get_basked_representation, multiple_generate_connection_discrete
 from torch_geometric.data import Batch
-import torch.nn.functional as F
+
 
 class GraphEnsemble(BaseEnsemble):
     def __init__(
@@ -32,7 +32,7 @@ class GraphEnsemble(BaseEnsemble):
         weight_decay: float = 0.003,
         mask_on_learner: int = 2,
         temperature: float = 0.9, 
-        edge_creation_mode: Literal["center", "upper"] = "center",
+        edge_creation_mode: Literal["center", "upper"] = "upper",
         cosine_threshold: float = 0.7,
         keep_temperature_stable: bool = False
     ) -> None:
@@ -87,11 +87,13 @@ class GraphEnsemble(BaseEnsemble):
 
     def forward(
         self, 
-        batch_lst: list[Tensor], 
-        attention_mask: Tensor | None = None
+        batch: EnsembleForwardInput
     ) -> EnsembleForwardOut:
-        
+        batch_lst: list[Tensor] = batch.batch_lst
+        attention_mask: Tensor | None = batch.attention_mask
+
         valid_patch_mask: list[Tensor] = []
+        bpt_adj: list[Tensor] = []
         step: int = attention_mask.shape[1] + len(self.learners)
         diagonal_att_mask: Tensor = attention_mask.diagonal(dim1=1, dim2=2) 
 
@@ -110,15 +112,25 @@ class GraphEnsemble(BaseEnsemble):
             )
 
             mask_map: Tensor = chosen_ids == self.hparams.mask_on_learner
-            for idx, elem in enumerate(mask_map):
-                if elem:
+            for sample_idx, (elem_msk, c_id) in enumerate(zip(mask_map, chosen_ids)):
+                if elem_msk:
                     valid_patch_mask.append(
-                        diagonal_att_mask[idx]
+                        diagonal_att_mask[sample_idx]
                     )
                 else:
                     valid_patch_mask.append(
-                        torch.ones_like(diagonal_att_mask[idx])
+                        torch.ones_like(diagonal_att_mask[sample_idx])
                     )
+
+                if batch.bpt_info is not None:
+                    db_idx = self.hparams.model_dataset_info[c_id]
+                    bpt_adj.append(batch.bpt_info[db_idx][sample_idx])
+
+
+            if len(bpt_adj) > 0:
+                bpt_adj = torch.stack(bpt_adj)
+            else:
+                bpt_adj = None
 
             graph_out: GraphGenout = generate_connection_discrete(
                 patches_emb=chosen_lr_patches,
@@ -127,10 +139,10 @@ class GraphEnsemble(BaseEnsemble):
                 load_param=self.hparams.graph_load_param, 
                 temperature=self.temperature,
                 valid_patch_mask=torch.stack(valid_patch_mask), 
-                device=self.device, 
-                adapt_load_param=False,
+                device=self.device,
                 edge_creation_mode=self.hparams.edge_creation_mode,
-                threshold=self.hparams.cosine_threshold
+                threshold=self.hparams.cosine_threshold, 
+                bpt_adjacency=bpt_adj
             )
 
         else:
@@ -142,9 +154,9 @@ class GraphEnsemble(BaseEnsemble):
                 device=self.device, 
                 mask_on_learner=self.hparams.mask_on_learner, 
                 central_node_mode=self.hparams.central_node_mode, 
-                adapt_load_param=False,
                 edge_creation_mode=self.hparams.edge_creation_mode,
-                threshold=self.hparams.cosine_threshold
+                threshold=self.hparams.cosine_threshold, 
+                bpt_adj=batch.bpt_info
             )
 
             step = (attention_mask.shape[1] * len(self.learners)) + 1

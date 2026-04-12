@@ -7,7 +7,7 @@ from typing import Any, Type
 import torchmetrics as tm
 from dataset_handler.cleopatra_dist import get_dataset_weights
 from models_handler.base.base_learner import BaseLearner
-from utility.utility import CleopatraEnsembleInput, CleopatraOut, EnsembleForwardOut, LearnerForwardOut, make_metrics
+from utility.utility import BptEnsembleInput, CleopatraEnsembleInput, CleopatraOut, EnsembleForwardInput, EnsembleForwardOut, LearnerForwardOut, make_metrics
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.optim import Optimizer
@@ -198,19 +198,16 @@ class BaseEnsemble(LightningModule):
         return out
 
     
-
     @abstractmethod
     def forward(
         self, 
-        batch_lst: list[Tensor], 
-        attention_mask: Tensor | None = None
+        batch: EnsembleForwardInput
     ) -> EnsembleForwardOut:
         pass
     
-    
     def base_step(
         self, 
-        batch: CleopatraEnsembleInput, 
+        batch: CleopatraEnsembleInput | BptEnsembleInput, 
         step_type: str = "train"
     ) -> CleopatraOut:
 
@@ -218,8 +215,11 @@ class BaseEnsemble(LightningModule):
 
         img, label, attention_mask, _ = batch
         ensemble_logits, learner_logits, additional_logs = self.forward(
-            batch_lst=img, 
-            attention_mask=attention_mask
+            batch=EnsembleForwardInput(
+                batch_lst=img,
+                attention_mask=attention_mask, 
+                bpt_info=batch.bpt_info if isinstance(BptEnsembleInput, batch) else None
+            )
         )
         models_logits: Tensor = torch.cat([ensemble_logits.unsqueeze(dim=1), learner_logits], dim=1)
 
@@ -262,7 +262,12 @@ class BaseEnsemble(LightningModule):
             label=label
         )
 
-    def training_step(self, batch: CleopatraEnsembleInput, batch_idx: int) -> Tensor:
+    def training_step(
+        self, 
+        batch: CleopatraEnsembleInput | BptEnsembleInput, 
+        batch_idx: int
+    ) -> Tensor:
+        
         loss, _, _, _ = self.base_step(batch)
         self.log(
             name=f"{self.hparams.handler_model_name}_train_loss", 
@@ -289,7 +294,11 @@ class BaseEnsemble(LightningModule):
             return loss[0] + learner_loss_avg * self.hparams.learner_loss_regulizer
 
 
-    def validation_step(self, batch: CleopatraEnsembleInput, batch_idx: int) -> None:
+    def validation_step(
+        self, 
+        batch: CleopatraEnsembleInput | BptEnsembleInput, 
+        batch_idx: int
+    ) -> None:
         loss, logits, preds, labels = self.base_step(
             batch=batch, 
             step_type="val"

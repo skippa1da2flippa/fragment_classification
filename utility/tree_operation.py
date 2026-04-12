@@ -1,3 +1,4 @@
+import torch
 from utility.patch_shap_bpt import BPT
 from torch import Tensor, tensor, zeros
 
@@ -28,11 +29,16 @@ def get_parition_lca_from_percentage(tree: BPT, percentage: float = 0.3, min_mar
 
 
 def get_adjacency_pair_from_coalitions(data: list[list[float]], seq_size: int = 196) -> Tensor:
-    adjacency: Tensor = zeros(seq_size, seq_size)
+    adjacency: Tensor = zeros(seq_size + 1, seq_size + 1, dtype=torch.float)
     for coalition in data:
         coalition_t: Tensor = tensor(coalition)
+        coalition_t += 1 # shift patches idx to make space for <CLS>
 
         adjacency[coalition_t.unsqueeze(dim=1), coalition_t.unsqueeze(dim=0)] = 1
+
+    # Connect <CLS> token to all the patches
+    adjacency[0, :] = 1.
+    adjacency[:, 0] = 1
 
     return adjacency
 
