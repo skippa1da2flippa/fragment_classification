@@ -1,4 +1,5 @@
 from utility.patch_shap_bpt import BPT
+from torch import Tensor, tensor, zeros
 
 
 def get_partition_lca_from_level(tree: BPT, level: int) -> list[list[float]]:
@@ -11,7 +12,7 @@ def get_partition_lca_from_level(tree: BPT, level: int) -> list[list[float]]:
         f"the actual height of the tree is {len(tree.levels)}"
     )
         
-def get_parition_lca_from_percentage(tree: BPT, percentage: float, min_margin: float = 0.05) -> list[list[float]]:
+def get_parition_lca_from_percentage(tree: BPT, percentage: float = 0.3, min_margin: float = 0.1) -> list[list[float]]:
     patch_num: int = tree.total_leaves
     for bpt_level in BPT.levels:
         level_cardinality: float = len(bpt_level.nodes)
@@ -23,4 +24,33 @@ def get_parition_lca_from_percentage(tree: BPT, percentage: float, min_margin: f
     raise Exception(
         f"No level found with this percentage: {percentage}, "
         f"try with a bigger min_margin w.r.t the actual: {min_margin}"
+    )
+
+
+def get_adjacency_pair_from_coalitions(data: list[list[float]], seq_size: int = 196) -> Tensor:
+    adjacency: Tensor = zeros(seq_size, seq_size)
+    for coalition in data:
+        coalition_t: Tensor = tensor(coalition)
+
+        adjacency[coalition_t.unsqueeze(dim=1), coalition_t.unsqueeze(dim=0)] = 1
+
+    return adjacency
+
+
+
+def get_adjacency_from_BPT(
+    tree: BPT,
+    percentage: float = 0.3,
+    margin: float = 0.1
+) -> Tensor:
+    
+    data: list[list[float]] = get_parition_lca_from_percentage(
+        tree=tree,
+        percentage=percentage,
+        min_margin=margin
+    )
+
+    return get_adjacency_pair_from_coalitions(
+        data=data, 
+        seq_size=tree.total_leaves
     )
