@@ -14,7 +14,7 @@ import torch.nn as nn
 import torchmetrics as tm
 from torchmetrics import MetricCollection
 import random
-from utility.patch_shap_bpt import BPT
+from dataclasses import dataclass
 
 random.seed(42)
 
@@ -37,6 +37,140 @@ style_mapping = {
     "Roman": "antique",
     "Surrealism": "modern"
 }
+
+@dataclass
+class PatchWrapper: # it's a node in bpt tree
+    colation_type: Literal["patch", "coalition"]
+    coalition_id: int
+    coalition_member: set[int]
+    adjacent_coalition: set[int]
+    max_R: float
+    min_R: float
+    max_G: float
+    min_G: float        
+    max_B: float
+    min_B: float
+    perimeter: float 
+    area: float
+    color_range: float = -1
+    lv: int | None = None
+    kids: tuple[int, int] | None = None 
+
+    def __eq__(self, value: "PatchWrapper") -> bool:
+        return self.coalition_id == value.coalition_id
+    
+    def __len__(self) -> int:
+        return len(self.coalition_member)
+    
+    def copy(self) -> "PatchWrapper":
+        return PatchWrapper(
+            colation_type=self.colation_type,
+            coalition_id=self.coalition_id,
+            coalition_member=self.coalition_member.copy(),
+            adjacent_coalition=self.adjacent_coalition.copy(),
+            max_R=self.max_R,
+            min_R=self.min_R,
+            max_G=self.max_G,
+            min_G=self.min_G,
+            max_B=self.max_B,
+            min_B=self.min_B,
+            perimeter=self.perimeter,
+            area=self.area,
+            color_range=self.color_range,
+            lv=self.lv,
+            kids=tuple(self.kids) if self.kids is not None else None
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "colation_type": self.colation_type,
+            "coalition_id": self.coalition_id,
+            "coalition_member": list(self.coalition_member),
+            "adjacent_coalition": list(self.adjacent_coalition),
+            "max_R": self.max_R,
+            "min_R": self.min_R,
+            "max_G": self.max_G,
+            "min_G": self.min_G,
+            "max_B": self.max_B,
+            "min_B": self.min_B,
+            "perimeter": self.perimeter,
+            "area": self.area,
+            "color_range": self.color_range,
+            "lv": self.lv,
+            "kids": list(self.kids) if self.kids is not None else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PatchWrapper":
+        return cls(
+            colation_type=data["colation_type"],
+            coalition_id=data["coalition_id"],
+            coalition_member=set(data["coalition_member"]),
+            adjacent_coalition=set(data["adjacent_coalition"]),
+            max_R=data["max_R"],
+            min_R=data["min_R"],
+            max_G=data["max_G"],
+            min_G=data["min_G"],
+            max_B=data["max_B"],
+            min_B=data["min_B"],
+            perimeter=data["perimeter"],
+            area=data["area"],
+            color_range=data.get("color_range", -1),
+            lv=data.get("lv"),
+            kids=tuple(data["kids"]) if data.get("kids") is not None else None,
+        )
+
+
+@dataclass
+class BptLevel:
+    level_id: int
+    nodes: list[PatchWrapper]
+    min_node_id: int
+    max_node_id: int
+
+    def to_dict(self) -> dict:
+        return {
+            "level_id": self.level_id,
+            "nodes": [node.to_dict() for node in self.nodes],
+            "min_node_id": self.min_node_id,
+            "max_node_id": self.max_node_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "BptLevel":
+        return cls(
+            level_id=data["level_id"],
+            nodes=[PatchWrapper.from_dict(node) for node in data["nodes"]],
+            min_node_id=data["min_node_id"],
+            max_node_id=data["max_node_id"],
+        )
+
+@dataclass
+class BPT:
+    total_nodes: int 
+    total_leaves: int
+    height: int
+    levels: list[BptLevel]
+    image_name: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "image_name": self.image_name,
+            "total_nodes": self.total_nodes,
+            "total_leaves": self.total_leaves,
+            "height": self.height,
+            "levels": [level.to_dict() for level in self.levels]
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "BPT":
+        return cls(
+            levels=[BptLevel.from_dict(level) for level in data["levels"]],
+            total_nodes=data["total_nodes"],
+            total_leaves=data["total_leaves"],
+            height=data["height"],
+            image_name=data["image_name"]
+        )
 
 # A function for reversing ImageNet normalization
 denormalize = T.Normalize(mean=[-m/s for m, s in zip(mean3, std3)], std=[1/s for s in std3])
@@ -887,3 +1021,4 @@ class ActFunEnum(Enum):
 
 def get_style_labels(path: str = "dataset", path_epoch: str = "dataset_epoch") -> list[str]:
     return os.listdir(os.path.join(path, "train")), os.listdir(os.path.join(path_epoch, "train"))
+
