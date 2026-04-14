@@ -16,13 +16,16 @@ def process_one_directory(input_dir: str, output_dir: str) -> None:
 
 def get_bpt_dataset(dataset_path: str, output_path: str) -> None:   
     for split in os.listdir(dataset_path):
+        if split == "test" and os.path.basename(dataset_path) == "extrapolated_dataset": # TODO remove
+            continue
+
         split_path = os.path.join(dataset_path, split)
         if not os.path.exists(split_path):
             continue
         
         styles = [d for d in os.listdir(split_path) if os.path.isdir(os.path.join(split_path, d))]
         
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=11) as executor:
             futures = []
             for style in styles:
                 input_dir = os.path.join(split_path, style)

@@ -320,12 +320,14 @@ def ensemble_graph_wrapper(
         gnn_num_layer = trial.suggest_int("gnn_num_layer", 1, 3)
         gnn_act_fun = trial.suggest_categorical("gnn_act_fun", ["relu", "gelu", "elu", "tanh"])
         gnn_dropout = trial.suggest_float("gnn_dropout", 0.0, 0.6)
-        graph_load_param = trial.suggest_float("graph_load_param", 0.1, 1)
+        graph_load_param = 0 # trial.suggest_float("graph_load_param", 0.1, 1)
         use_weighted_loss = trial.suggest_categorical("use_weighted_loss", [True, False])
-        min_epoch_gnn = 1 # trial.suggest_int("min_epoch_gnn", 1, 7)
+        min_epoch_gnn = trial.suggest_int("min_epoch_gnn", 1, 4)
         central_node_mode = trial.suggest_categorical("central_node_mode", ["mean", "zero"])
         temperature = trial.suggest_float("temperature", 0.5, 9)
         keep_temperature_stable = trial.suggest_categorical("keep_temperature_stable", [True, False])
+        threshold: float = trial.suggest_categorical("cosine_threshold", [0.5, 0.6, 0.7, 0.8])
+        learner_loss_regulizer: float = trial.suggest_categorical("learner_loss_regulizer", [0.2, 0.4, 0.6, 0.8])
 
         # Optimizer params
         lr = trial.suggest_float("lr", 1e-5, 5e-3, log=True)
@@ -335,6 +337,7 @@ def ensemble_graph_wrapper(
         # 🧠 Create model
         # -----------------------------
         model = GraphEnsemble(
+            learner_loss_regulizer=learner_loss_regulizer,
             model_paths=model_paths,
             model_types=model_types,
             learners_name=learners_name, 
@@ -351,7 +354,9 @@ def ensemble_graph_wrapper(
             keep_temperature_stable=keep_temperature_stable, 
             lr=lr,
             weight_decay=weight_decay, 
-            graph_load_param=graph_load_param
+            graph_load_param=graph_load_param,
+            edge_creation_mode="upper", 
+            cosine_threshold=threshold
         )
 
         # -----------------------------

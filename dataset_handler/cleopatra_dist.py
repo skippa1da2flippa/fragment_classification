@@ -2,7 +2,7 @@ import os
 from torch import Tensor, tensor
 from utility.utility import get_dataset_cardinality
 
-dataset_path: str = os.path.join("dataset")
+dataset_path: str = os.path.join("datasets", "fragment_dataset")
 
 def get_dataset_weights(dataset_pth: str = "", full_count: bool = True) -> Tensor:
     

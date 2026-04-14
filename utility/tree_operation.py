@@ -15,7 +15,7 @@ def get_partition_lca_from_level(tree: BPT, level: int) -> list[list[float]]:
         
 def get_parition_lca_from_percentage(tree: BPT, percentage: float = 0.3, min_margin: float = 0.1) -> list[list[float]]:
     patch_num: int = tree.total_leaves
-    for bpt_level in BPT.levels:
+    for bpt_level in tree.levels:
         level_cardinality: float = len(bpt_level.nodes)
         level_percentage: float = level_cardinality / patch_num
 

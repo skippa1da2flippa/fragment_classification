@@ -213,12 +213,12 @@ class BaseEnsemble(LightningModule):
 
         losses: list[Tensor] = []
 
-        img, label, attention_mask, _ = batch
+        img, label, attention_mask = batch.image, batch.label, batch.mask 
         ensemble_logits, learner_logits, additional_logs = self.forward(
             batch=EnsembleForwardInput(
                 batch_lst=img,
                 attention_mask=attention_mask, 
-                bpt_info=batch.bpt_info if isinstance(BptEnsembleInput, batch) else None
+                bpt_info=batch.bpt_info if isinstance(batch, BptEnsembleInput) else None
             )
         )
         models_logits: Tensor = torch.cat([ensemble_logits.unsqueeze(dim=1), learner_logits], dim=1)

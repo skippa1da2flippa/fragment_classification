@@ -291,15 +291,15 @@ def bpt_ensemble_collate(
 ) -> BptEnsembleInput:
 
     alpha_t: list[list[Tensor]] = [[] for _ in range(len(batch))]
-    img_t: list[list[Tensor]] = [[] for _ in range(len(batch[0].images))]
+    img_t: list[list[Tensor]] = [[] for _ in range(len(batch[0].image))]
     bpt_t: list[list[Tensor]] = [[] for _ in range(len(batch[0].bpt_info))]
     names_t: list[str] = []
     lbl_t: list[Tensor] = []
 
     for idx, elem in enumerate(batch):
-        for db_idx, (img, bpt) in enumerate(zip(elem.images, elem.bpt_info)):
+        for db_idx, (img, bpt) in enumerate(zip(elem.image, elem.bpt_info)):
             img_t[db_idx].append(img)
-            alpha_t[idx].append(elem.alphas[db_idx])
+            alpha_t[idx].append(elem.mask[db_idx])
             bpt_t[db_idx].append(
                 get_adjacency_from_BPT(
                     tree=bpt,
@@ -359,7 +359,7 @@ class BptEnsembleCollate:
         
         self.use_countourn: bool = use_countourn
         self.mask_on_db: int = mask_on_db
-        self.bpt_percentage: float = bpt_percentage,
+        self.bpt_percentage: float = bpt_percentage
         self.bpt_margin: float = bpt_margin
 
     def __call__(self, batch: list[BptEnsembleDatasetPre]) -> BptEnsembleInput:
@@ -706,7 +706,7 @@ class BptStyleEnsembleDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         train_db: StyleDatasetEnsembleBPT = StyleDatasetEnsembleBPT(
-            paths=self.train_paths_img, 
+            img_paths=self.train_paths_img, 
             labels=self.train_labels,
             bpt_paths=self.train_paths_bpt,
             is_train=True
@@ -724,7 +724,7 @@ class BptStyleEnsembleDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         val_db: StyleDatasetEnsembleBPT = StyleDatasetEnsembleBPT(
-            paths=self.val_paths_img, 
+            img_paths=self.val_paths_img, 
             labels=self.val_labels,
             bpt_paths=self.val_paths_bpt,
             is_train=False
@@ -741,7 +741,7 @@ class BptStyleEnsembleDataModule(pl.LightningDataModule):
     
     def test_dataloader(self):
         test_db: StyleDatasetEnsembleBPT = StyleDatasetEnsembleBPT(
-            paths=self.test_paths_img, 
+            img_paths=self.test_paths_img, 
             labels=self.test_labels,
             bpt_paths=self.test_paths_bpt,
             is_train=False
@@ -771,9 +771,10 @@ def load_paths_and_labels(split_dir: str) -> tuple[list[str], list[int]]:
         if not os.path.isdir(cls_dir):
             continue
         for f in os.listdir(cls_dir):
-            if f.lower().endswith(('.jpg', '.jpeg', '.png')):  # include only images
-                image_paths.append(os.path.join(cls_dir, f))
-                labels.append(class_to_idx[cls_name])
+            # if f.lower().endswith(('.jpg', '.jpeg', '.png')):  # include only images
+            image_paths.append(os.path.join(cls_dir, f))
+            labels.append(class_to_idx[cls_name])
+
     return image_paths, labels
 
 def load_paths_and_labels_splitted(split_dir) -> dict[str, list[str]]:
@@ -912,6 +913,8 @@ def init_data_module_ensemble(
 def init_data_module_ensemble_bpt(
     data_dirs_img: list[str], 
     data_dirs_bpt: list[str], 
+    bpt_percentage: float = 0.3,
+    bpt_margin: float = 0.1,
     batch_size: int = 32, 
     num_workers: int = 4, 
     use_test: bool = False, 
@@ -972,7 +975,9 @@ def init_data_module_ensemble_bpt(
             batch_size=batch_size, 
             num_workers=num_workers,
             masking_vit_on=use_masked_vit_on,
-            use_countourn=use_contourn
+            use_countourn=use_contourn,
+            bpt_margin=bpt_margin,
+            bpt_percentage=bpt_percentage
         )
     else:
         return BptStyleEnsembleDataModule(
@@ -988,7 +993,9 @@ def init_data_module_ensemble_bpt(
                 batch_size=batch_size, 
                 num_workers=num_workers,
                 masking_vit_on=use_masked_vit_on,
-                use_countourn=use_contourn
+                use_countourn=use_contourn,
+                bpt_margin=bpt_margin,
+                bpt_percentage=bpt_percentage
             )
     
 
