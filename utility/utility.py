@@ -729,7 +729,7 @@ def get_raw_edge_mask(
     patches_emb: Tensor, 
     temperature: Tensor, 
     load_param: float = 0.5,
-    adapt_load_param: bool = False,
+    adapt_load_param: bool = True,
     valid_patch_mask: Tensor | None = None, 
     mode: Literal["center", "upper"] = "center", 
     threshold: float = 0.7
@@ -752,6 +752,7 @@ def get_raw_edge_mask(
             <= avg_cosine_sim + std_cosine_sim * load_param
         ) 
     else:
+        threshold /= temperature
         edge_mask: Tensor = cosine_similarity > threshold
 
     if valid_patch_mask is not None:
@@ -808,7 +809,12 @@ def generate_connection_discrete(
     )
 
     if bpt_adjacency is not None:
-        edge_mask &= bpt_adjacency.bool()
+        bpt_adjacency = bpt_adjacency.bool() 
+        hide_cls: Tensor = torch.ones_like(bpt_adjacency)
+        hide_cls[:, 0, :] = False
+        hide_cls[:, :, 0] = False
+
+        edge_mask = (bpt_adjacency & hide_cls) | (bpt_adjacency & edge_mask) 
 
     edge_mask = add_central_nodes_connection(edge_mask=edge_mask)
     
@@ -885,6 +891,12 @@ def multiple_generate_connection_discrete(
         )
 
         if bpt_adj is not None:
+            bpt_adj[idx] = bpt_adj[idx].bool() 
+            hide_cls: Tensor = torch.ones_like(bpt_adj[idx])
+            hide_cls[:, 0, :] = False
+            hide_cls[:, :, 0] = False
+            
+            edge_mask = (bpt_adj[idx] & hide_cls) | (bpt_adj[idx] & edge_mask) 
             edge_mask &= bpt_adj[idx]
 
         edge_masks.append(edge_mask)
