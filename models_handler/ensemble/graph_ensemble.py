@@ -7,15 +7,29 @@ from models_handler.base.base_learner import BaseLearner
 from utility.utility import EnsembleForwardInput, EnsembleForwardOut, GNNType, GraphGenout, generate_connection_discrete, get_basked_representation, multiple_generate_connection_discrete
 from torch_geometric.data import Batch
 
+model_path = [
+    (
+        "FINAL_MODELS\\final_VIT\\FINAL_VIT_CHKT\\weights.ckpt", 
+        "FINAL_MODELS\\final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv\\version_0\\hparams.yaml"
+    ), 
+    (
+        "FINAL_MODELS\\final_VIT\\FINAL_VIT_CHKT\\weights_extrapolated-v2.ckpt",
+        "FINAL_MODELS\\final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_extrapolated\\version_4\\hparams.yaml"
+    ),
+    (
+        "FINAL_MODELS\\final_VIT\\FINAL_VIT_CHKT\\weights_masked_head_upd_wo_CLS.ckpt",
+        "FINAL_MODELS\\final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_masked_head_upd_wo_CLS\\version_1\\hparams.yaml"
+    )
+]
 
 class GraphEnsemble(BaseEnsemble):
     def __init__(
-        self, 
-        model_paths: list[tuple[str, str]], 
+        self,  
         model_types: list[Type[BaseLearner]] | Type[BaseLearner],
         model_dataset_info: list[int],
         gnn_type: str, 
         gnn_num_layer: int,
+        model_paths: list[tuple[str, str]] | None = None,
         learner_loss_regulizer: float = 0.2,
         decision_mode: Literal["least", "most", "all"] = "most",
         learners_name: list[str] = [],
@@ -37,6 +51,8 @@ class GraphEnsemble(BaseEnsemble):
         keep_temperature_stable: bool = False
     ) -> None:
         
+        model_paths = model_path if model_paths is None else model_paths
+
         gnn: nn.Module = GNNType[gnn_type].value(
             in_channels=initial_emb_size,
             hidden_channels=initial_emb_size,
@@ -112,6 +128,7 @@ class GraphEnsemble(BaseEnsemble):
             )
 
             mask_map: Tensor = chosen_ids == self.hparams.mask_on_learner
+            # TODO higly inefficient remove the for and put just matrixmultiplication
             for sample_idx, (elem_msk, c_id) in enumerate(zip(mask_map, chosen_ids)):
                 if elem_msk:
                     valid_patch_mask.append(

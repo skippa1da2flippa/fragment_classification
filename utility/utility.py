@@ -350,13 +350,20 @@ class GraphGenout(NamedTuple):
     graph_edges_cardinality: Tensor | None
     graph_density: Tensor | None
 
-def generate_sub_edge_index(adjacencies: Tensor, x: Tensor) -> list[Data]:
+def generate_sub_edge_index(adjacencies: Tensor, x: Tensor, weighted: bool = False) -> list[Data]:
     data_list = []
     for b in range(adjacencies.size(0)):
-        edge_index, _ = dense_to_sparse(adjacencies[b])
+        edge_index, edge_attr = dense_to_sparse(adjacencies[b])
+        input_pack: dict = {
+            "x": x[b],
+            "edge_index": edge_index
+        }
+
+        if weighted:
+            input_pack["edge_attr"] = edge_attr
+
         data = Data(
-            x=x[b],
-            edge_index=edge_index
+            **input_pack
         )
         data_list.append(data)
 
@@ -777,6 +784,7 @@ def generate_connection_discrete(
     adapt_load_param: bool = False, 
     edge_creation_mode: Literal["center", "upper"] = "upper",
     threshold: float = 0.7,
+    weighted: bool = True, 
     device: str = "cuda"
 ) -> GraphGenout:
     
@@ -798,7 +806,7 @@ def generate_connection_discrete(
         
     global_nodes = torch.cat([global_nodes, central_node], dim=1)
 
-    edge_mask, _, avg_cosine_sim, std_cosine_sim = get_raw_edge_mask(
+    edge_mask, cosine_similarity, avg_cosine_sim, std_cosine_sim = get_raw_edge_mask(
         patches_emb=patches_emb, 
         temperature=temperature,
         valid_patch_mask=valid_patch_mask,
@@ -817,18 +825,43 @@ def generate_connection_discrete(
         edge_mask = (bpt_adjacency & hide_cls) | (bpt_adjacency & edge_mask) 
 
     edge_mask = add_central_nodes_connection(edge_mask=edge_mask)
-    
     diagonal_mask = torch.tensor(
-        [x for x in range(edge_mask.shape[1])],
+        list(range(edge_mask.shape[1])),
         device=device
     )
 
-    adjacency: Tensor = edge_mask.float()
+    if weighted:
+        cosine_similarity_full_agg: Tensor = torch.ones(
+            size=(
+                other_global_nodes.shape[0], 
+                other_global_nodes.shape[1] + 2, 
+                other_global_nodes.shape[1] + 2
+            ), 
+            device=patches_emb.device
+        ).divide(temperature)
+
+        _, cosine_similarity_agg, _, _ = get_raw_edge_mask(
+            patches_emb=aggregation_nodes, 
+            temperature=temperature,
+            threshold=threshold,
+            mode=edge_creation_mode, 
+            adapt_load_param=adapt_load_param,
+            load_param=load_param
+        )
+
+        cosine_similarity_full_agg[:, :cosine_similarity_agg.shape[1], :cosine_similarity_agg.shape[1]] = cosine_similarity_agg
+        adjacency: Tensor = torch.zeros_like(edge_mask)
+        adjacency[:, :patches_emb.shape[1], :patches_emb.shape[1]] = cosine_similarity
+        adjacency[:, patches_emb.shape[1]:, patches_emb.shape[1]:] = cosine_similarity_full_agg[:, 1:, 1:]
+    else: 
+        adjacency: Tensor = edge_mask.float()
+
     adjacency[:, diagonal_mask, diagonal_mask] = 0.
 
     graph_batch: list[Data] = generate_sub_edge_index(
         adjacencies=adjacency,
-        x=global_nodes
+        x=global_nodes, 
+        weighted=weighted
     )
 
     grap_density, graph_card = compute_graph_stats(

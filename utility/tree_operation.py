@@ -27,6 +27,25 @@ def get_parition_lca_from_percentage(tree: BPT, percentage: float = 0.3, min_mar
         f"try with a bigger min_margin w.r.t the actual: {min_margin}"
     )
 
+def get_parition_lca_from_percentage2(tree: BPT, percentage: float = 0.3) -> list[list[float]]:
+    patch_num: int = tree.total_leaves
+    closest_level = None
+    min_diff = float('inf')
+    
+    for bpt_level in tree.levels:
+        level_cardinality: float = len(bpt_level.nodes)
+        level_percentage: float = level_cardinality / patch_num
+        diff = abs(level_percentage - percentage)
+        
+        if diff < min_diff:
+            min_diff = diff
+            closest_level = bpt_level
+    
+    if closest_level is None:
+        raise Exception("No levels found in the tree")
+    
+    return [list(elem.coalition_member) for elem in closest_level.nodes]
+
 
 def get_adjacency_pair_from_coalitions(data: list[list[float]], seq_size: int = 196) -> Tensor:
     adjacency: Tensor = zeros(seq_size + 1, seq_size + 1, dtype=torch.float)
