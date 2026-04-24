@@ -13,7 +13,7 @@ def get_partition_lca_from_level(tree: BPT, level: int) -> list[list[float]]:
         f"the actual height of the tree is {len(tree.levels)}"
     )
         
-def get_parition_lca_from_percentage(tree: BPT, percentage: float = 0.3, min_margin: float = 0.1) -> list[list[float]]:
+def get_parition_lca_from_percentage2(tree: BPT, percentage: float = 0.3, min_margin: float = 0.1) -> list[list[float]]:
     patch_num: int = tree.total_leaves
     for bpt_level in tree.levels:
         level_cardinality: float = len(bpt_level.nodes)
@@ -27,7 +27,7 @@ def get_parition_lca_from_percentage(tree: BPT, percentage: float = 0.3, min_mar
         f"try with a bigger min_margin w.r.t the actual: {min_margin}"
     )
 
-def get_parition_lca_from_percentage2(tree: BPT, percentage: float = 0.3) -> list[list[float]]:
+def get_parition_lca_from_percentage(tree: BPT, percentage: float = 0.3, min_margin: float = 0.1) -> list[list[float]]:
     patch_num: int = tree.total_leaves
     closest_level = None
     min_diff = float('inf')

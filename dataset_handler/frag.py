@@ -120,11 +120,9 @@ class StyleDatasetEnsemble(Dataset):
         out: CleopatraEnsembleInput = CleopatraEnsembleInput(
             image=images, 
             mask=alphas,
-            label=label
+            label=label, 
+            name=os.path.basename(self.paths[0][idx])
         )
-
-        if self.return_name:
-            out.name = os.path.basename(self.paths[0][idx])
         
         return out
     
@@ -254,14 +252,14 @@ def ensemble_collate(
 ) -> CleopatraEnsembleInput:
 
     alpha_t: list[list[Tensor]] = [[] for _ in range(len(batch))]
-    img_t: list[list[Tensor]] = [[] for _ in range(len(batch[0].images))]
+    img_t: list[list[Tensor]] = [[] for _ in range(len(batch[0].image))]
     names_t: list[str] = []
     lbl_t: list[Tensor] = []
 
     for idx, elem in enumerate(batch):
-        for db_idx, img in enumerate(elem.images):
+        for db_idx, img in enumerate(elem.image):
             img_t[db_idx].append(img)
-            alpha_t[idx].append(elem.alphas[db_idx])
+            alpha_t[idx].append(elem.mask[db_idx])
 
         if elem.name is not None:
             names_t.append(elem.name)

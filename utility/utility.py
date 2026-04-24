@@ -773,6 +773,11 @@ def get_raw_edge_mask(
 
     return edge_mask, cosine_similarity, avg_cosine_sim, std_cosine_sim
 
+def masked_softmax(logits: Tensor, mask: Tensor, dim: int = -1) -> Tensor:
+    # mask: True dove vuoi tenere i valori, False dove vuoi mascherare
+    masked_logits: Tensor = logits.masked_fill(~mask, -1e9)
+    return F.softmax(masked_logits, dim=dim)
+
 def generate_connection_discrete(
     patches_emb: Tensor, 
     other_global_nodes: Tensor,
@@ -784,7 +789,8 @@ def generate_connection_discrete(
     adapt_load_param: bool = False, 
     edge_creation_mode: Literal["center", "upper"] = "upper",
     threshold: float = 0.7,
-    weighted: bool = True, 
+    weighted: bool = False,   
+    pruned: bool = True, 
     device: str = "cuda"
 ) -> GraphGenout:
     
@@ -807,7 +813,7 @@ def generate_connection_discrete(
     global_nodes = torch.cat([global_nodes, central_node], dim=1)
 
     edge_mask, cosine_similarity, avg_cosine_sim, std_cosine_sim = get_raw_edge_mask(
-        patches_emb=patches_emb, 
+        patches_emb=patches_emb,
         temperature=temperature,
         valid_patch_mask=valid_patch_mask,
         adapt_load_param=adapt_load_param, 
@@ -822,7 +828,11 @@ def generate_connection_discrete(
         hide_cls[:, 0, :] = False
         hide_cls[:, :, 0] = False
 
-        edge_mask = (bpt_adjacency & hide_cls) | (bpt_adjacency & edge_mask) 
+        if pruned:
+            edge_mask = (bpt_adjacency & edge_mask)
+        
+        else:
+            edge_mask = (bpt_adjacency & hide_cls) | (bpt_adjacency & edge_mask) 
 
     edge_mask = add_central_nodes_connection(edge_mask=edge_mask)
     diagonal_mask = torch.tensor(
@@ -850,9 +860,15 @@ def generate_connection_discrete(
         )
 
         cosine_similarity_full_agg[:, :cosine_similarity_agg.shape[1], :cosine_similarity_agg.shape[1]] = cosine_similarity_agg
-        adjacency: Tensor = torch.zeros_like(edge_mask)
+        adjacency: Tensor = torch.zeros_like(edge_mask, dtype=torch.float)
         adjacency[:, :patches_emb.shape[1], :patches_emb.shape[1]] = cosine_similarity
         adjacency[:, patches_emb.shape[1]:, patches_emb.shape[1]:] = cosine_similarity_full_agg[:, 1:, 1:]
+        adjacency *= edge_mask.float()
+
+        adjacency = masked_softmax(
+            logits=adjacency,
+            mask=edge_mask
+        )
     else: 
         adjacency: Tensor = edge_mask.float()
 
@@ -988,6 +1004,7 @@ def get_least_idx(ensamble_prediction_t: Tensor, most_used_values: Tensor) -> Te
 
     return last_idx
 
+
 def get_basked_representation(
     ensemble_logits_t: Tensor, 
     ensemble_patches_t: Tensor,
@@ -1002,6 +1019,10 @@ def get_basked_representation(
             ensamble_prediction_t=ensemble_prediction, 
             most_used_values=most_used_values
         )
+
+    else:
+        # TODO if more than one shre the most represent label take a random one
+        pass
 
     if choice not in ["least", "most"]:
         raise ValueError(f"!!! Mod yet to be developed !!!")

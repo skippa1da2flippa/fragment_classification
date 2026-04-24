@@ -28,8 +28,18 @@ if __name__ == "__main__":
         num_workers=10, 
         batch_size=50, 
         use_test=True,
-        bpt_percentage=0.3
+        bpt_percentage=0.9
     )
+
+    """data_module = init_data_module_ensemble(
+        data_dirs=[
+            os.path.join(base_dataset_path, "fragment_dataset"),
+            os.path.join(base_dataset_path, "extrapolated_dataset")
+        ], 
+        num_workers=10, 
+        batch_size=50, 
+        use_test=True
+    )"""
 
     """for bpt_percentage in [0.4, 0.5, 0.7, 0.9]:
         data_module = init_data_module_ensemble_bpt(
@@ -132,7 +142,7 @@ if __name__ == "__main__":
         }
     )
 
-    base = "EXPERIMENTS\\WEIGHTED_BEST_03_RIGHT"
+    base = "EXPERIMENTS\\PRUNED_BEST_09_RIGHT"
 
     # CSV logger
     logger_csv = CSVLogger(
