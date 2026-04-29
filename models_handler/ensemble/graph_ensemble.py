@@ -22,6 +22,21 @@ model_path = [
     )
 ]
 
+model_path2 = [
+    (
+        "final_VIT\\FINAL_VIT_CHKT\\weights_max_acc-v1.ckpt", 
+        "final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_max_acc\\version_1\\hparams.yaml"
+    ), 
+    (
+        "final_VIT\\FINAL_VIT_CHKT\\weights_extrapolated_max_accuracy-v1.ckpt",
+        "final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_extrapolated_max_accuracy\\version_2\\hparams.yaml"
+    ),
+    (
+        "final_VIT\\FINAL_VIT_CHKT\\weights_masked_head_upd_wo_CLS_max_acc.ckpt",
+        "final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_masked_head_upd_wo_CLS_max_acc\\version_1\\hparams.yaml"
+    )
+]
+
 class GraphEnsemble(BaseEnsemble):
     def __init__(
         self,  
@@ -207,8 +222,5 @@ class GraphEnsemble(BaseEnsemble):
            additional_log=additional_log
         )
     
-    
-    def on_fit_start(self) -> None:
-        for learner in self.learners:
-            learner.trainer = self.trainer
+
     

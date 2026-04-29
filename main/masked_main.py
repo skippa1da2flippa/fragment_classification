@@ -68,7 +68,7 @@ if __name__ == "__main__":
     weight_decay = 0.0004909363971039878
 
     data_module = init_data_module(
-        data_dir="dataset",
+        data_dir="datasets\\fragment_dataset",
         batch_size=256, 
         num_workers=12,
         sampler=False, 
@@ -93,14 +93,14 @@ if __name__ == "__main__":
     # CSV logger
     logger_csv = CSVLogger(
         save_dir=f"final_VIT\\FULL_VIT_TEST_logs",
-        name=f"FINAL_VIT_csv_masked_head_upd_wo_CLS",
+        name=f"FINAL_VIT_csv_masked_head_upd_wo_CLS_max_acc",
     )
 
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
         dirpath=os.path.join(base, f"FINAL_VIT_CHKT"),
-        filename=f"weights_masked_head_upd_wo_CLS",
-        monitor="val_loss",
-        mode="min",
+        filename=f"weights_masked_head_upd_wo_CLS_max_acc",
+        monitor="val_accuracy",
+        mode="max",
         save_top_k=1
     )
     early_stopping_cb = pl.callbacks.EarlyStopping(
@@ -115,9 +115,9 @@ if __name__ == "__main__":
     # 🚀 Train
     # -----------------------------
     trainer = pl.Trainer(
-        max_epochs=30,
+        max_epochs=50,
         logger=logger_csv,
-        callbacks=[checkpoint_cb, early_stopping_cb],
+        callbacks=[checkpoint_cb], # early_stopping_cb],
         enable_progress_bar=True,
         accelerator="auto",
         devices=1

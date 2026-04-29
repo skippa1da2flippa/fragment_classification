@@ -67,7 +67,7 @@ class VitClassifier(BaseLearner):
             num_classes=k_classes,
         )
 
-        # At start up the model is frozen beside its head and its tail
+        # At start up the model is frozen beside its head
         self.apply_params(
             value=False,
             module=self.backbone, 
@@ -144,8 +144,7 @@ class VitClassifier(BaseLearner):
         logits: Tensor = self.backbone.head(global_token)
 
         if return_embedding: 
-            return logits, emb
-        
+            return logits, emb 
         else:
             return logits
 
@@ -159,24 +158,24 @@ class VitClassifier(BaseLearner):
         # is called just onto the token which recieved
         # attention throughout the vit blocks
         if self.hparams.masked_attention:
-            return self.multi_task_forward(
+            logits: Tensor = self.multi_task_forward(
                 batch=batch,
                 attention_mask=attention_mask
             )
 
-        if attention_mask is None:
+        else: #if attention_mask is None:
             logits: Tensor = self.backbone(
                 x=batch
             )
-        else:
-            # In this case the aggregation fun `global_pool_nlc()`
-            # is called on the whole sequence not just
-            # on the attended tokens I
-            attention_mask = attention_mask.unsqueeze(dim=1)
-            logits: Tensor = self.backbone(
-                x=batch, 
-                attn_mask=attention_mask
-            )
+        # else:
+        #     # In this case the aggregation fun `global_pool_nlc()`
+        #     # is called on the whole sequence not just
+        #     # on the attended tokens I
+        #     attention_mask = attention_mask.unsqueeze(dim=1)
+        #     logits: Tensor = self.backbone(
+        #         x=batch, 
+        #         attn_mask=attention_mask
+        #     )
 
         return logits
 

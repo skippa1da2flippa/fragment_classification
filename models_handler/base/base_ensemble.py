@@ -274,7 +274,8 @@ class BaseEnsemble(LightningModule):
             value=loss[0], 
             prog_bar=True, 
             on_step=True, 
-            on_epoch=True
+            on_epoch=True, 
+            batch_size=batch.label.shape[0]
         )
 
         for idx, ls in enumerate(loss[1:]):
@@ -283,7 +284,8 @@ class BaseEnsemble(LightningModule):
                 value=ls, 
                 prog_bar=False, 
                 on_step=False, 
-                on_epoch=True
+                on_epoch=True, 
+                batch_size=batch.label.shape[0]
             )
         
         if self.current_epoch < self.hparams.min_epoch_handler_model:
@@ -309,7 +311,8 @@ class BaseEnsemble(LightningModule):
             value=loss[0], 
             prog_bar=True, 
             on_step=False, 
-            on_epoch=True
+            on_epoch=True, 
+            batch_size=batch.label.shape[0]
         )
 
         for idx in range(len(self.val_metrics)):
@@ -324,7 +327,8 @@ class BaseEnsemble(LightningModule):
                     loss[idx], 
                     prog_bar=False, 
                     on_step=True, 
-                    on_epoch=True
+                    on_epoch=True, 
+                    batch_size=batch.label.shape[0]
                 )
 
     def on_validation_epoch_end(self) -> None:
@@ -367,6 +371,10 @@ class BaseEnsemble(LightningModule):
                 log_blocks=False, 
                 min_epoch=self.hparams.min_epoch_handler_model
             )
+
+    def on_fit_start(self) -> None:
+        for learner in self.learners:
+            learner.trainer = self.trainer
 
     def on_train_end(self) -> None:
         for learner in self.learners:

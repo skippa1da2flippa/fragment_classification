@@ -1,5 +1,3 @@
-
-
 from utility.model_train_plotter import plot_accuracy_curves
 
 
@@ -28,11 +26,37 @@ if __name__ == "__main__":
     base_line_best_pruned_name: str = "baseline best"
 
     pruned_7: str = "EXPERIMENTS\\PRUNED_BEST_07_RIGHT\\Graph_ENSEMBLE_logs\\Graph\\version_0\\metrics.csv"
-    pruned_name_7: str = "pruned_5"
-    
+    pruned_name_7: str = "pruned_7"
+
+    pruned_9: str = "EXPERIMENTS\\PRUNED_BEST_09_RIGHT\\Graph_ENSEMBLE_logs\\Graph\\version_0\\metrics.csv"
+    pruned_name_9: str = "pruned_9"
+
+    unpruned_3 = "EXPERIMENTS\\model_name\\Graph_ENSEMBLE_logs\\Graph\\version_0\\metrics.csv"
+    unpruned_3_name = "unpruned_3"
+
+    unpruned_5 = "EXPERIMENTS\\model_name\\Graph_ENSEMBLE_logs\\Graph\\version_1\\metrics.csv"
+    unpruned_5_name = "unpruned_5"
+
+    unpruned_7 = "EXPERIMENTS\\model_name\\Graph_ENSEMBLE_logs\\Graph\\version_2\\metrics.csv"
+    unpruned_7_name = "unpruned_7"
+
+    unpruned_9 = "EXPERIMENTS\\model_name\\Graph_ENSEMBLE_logs\\Graph\\version_3\\metrics.csv"
+    unpruned_9_name = "unpruned_9"
+
+    pruned_7_max_acc: str = "EXPERIMENTS\\UNPRUNED_BEST_07_RIGHT_max_acc\\Graph_ENSEMBLE_logs\\Graph\\version_0\\metrics.csv"
+    pruned_name_7_max_acc: str = "pruned_7_.15_max_acc"
+
+    pruned_9_max_acc: str = "EXPERIMENTS\\UNPRUNED_BEST_07_RIGHT_max_acc\\Graph_ENSEMBLE_logs\\Graph\\version_1\\metrics.csv"
+    pruned_name_9_max_acc: str = "pruned_7_.2_max_acc"
+
+    #plot_accuracy_curves(
+    #    csv_paths=[unpruned, pruned, pruned_5, pruned_7, pruned_9, base_line_best],
+    #    names=[unpruned_name, pruned_name, pruned_name_5, pruned_name_7, pruned_name_9, base_line_best_pruned_name], 
+    #    plot_name="With_09.png"
+    #)
 
     plot_accuracy_curves(
-        csv_paths=[unpruned, pruned, pruned_5, pruned_7, base_line_best],
-        names=[unpruned_name, pruned_name, pruned_name_5, pruned_name_7, base_line_best_pruned_name], 
-        plot_name="With_07.png"
+        csv_paths=[pruned_7_max_acc, pruned_9_max_acc, base_line_best],
+        names=[pruned_name_7_max_acc, pruned_name_9_max_acc, base_line_best_pruned_name], 
+        plot_name="With_08_pruned_max_acc.png"
     )

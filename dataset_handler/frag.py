@@ -228,7 +228,7 @@ def masking_background_collate(
     )
 
     return CleopatraEnsembleInput(
-        images=img_tensor,
+        image=img_tensor,
         mask=attention_weights,
         label=lbl_tensor,
         name=names

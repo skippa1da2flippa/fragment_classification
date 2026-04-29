@@ -791,6 +791,7 @@ def generate_connection_discrete(
     threshold: float = 0.7,
     weighted: bool = False,   
     pruned: bool = True, 
+    connect_other_global_nodes: bool = False,
     device: str = "cuda"
 ) -> GraphGenout:
     
@@ -829,8 +830,7 @@ def generate_connection_discrete(
         hide_cls[:, :, 0] = False
 
         if pruned:
-            edge_mask = (bpt_adjacency & edge_mask)
-        
+            edge_mask = (bpt_adjacency & edge_mask)  
         else:
             edge_mask = (bpt_adjacency & hide_cls) | (bpt_adjacency & edge_mask) 
 
@@ -871,6 +871,21 @@ def generate_connection_discrete(
         )
     else: 
         adjacency: Tensor = edge_mask.float()
+
+
+    if connect_other_global_nodes:
+        community: Tensor = torch.cat([patches_emb[:, 1:, :], other_global_nodes], dim=1)
+        edge_mask_comm, _, _, _ = get_raw_edge_mask(
+            patches_emb=community, 
+            temperature=temperature,
+            threshold=threshold,
+            mode=edge_creation_mode, 
+            adapt_load_param=adapt_load_param,
+            load_param=load_param
+        )
+
+        edge_mask[:, 1:edge_mask_comm.shape[1] + 1, 1:edge_mask_comm.shape[1] + 1] |= edge_mask_comm
+        adjacency = edge_mask.float()
 
     adjacency[:, diagonal_mask, diagonal_mask] = 0.
 

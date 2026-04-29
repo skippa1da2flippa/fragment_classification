@@ -12,7 +12,7 @@ from pytorch_lightning.loggers import CSVLogger
 
 if __name__ == "__main__":
     data_module = init_data_module(
-        data_dir="extrapolated_dataset",
+        data_dir="datasets\\extrapolated_dataset",
         batch_size=256, 
         num_workers=6,
         sampler=False, 
@@ -63,14 +63,14 @@ if __name__ == "__main__":
     # CSV logger
     logger_csv = CSVLogger(
         save_dir=f"final_VIT\\FULL_VIT_TEST_logs",
-        name=f"FINAL_VIT_csv_extrapolated",
+        name=f"FINAL_VIT_csv_extrapolated_max_accuracy",
     )
 
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
         dirpath=os.path.join(base, f"FINAL_VIT_CHKT"),
-        filename=f"weights_extrapolated",
-        monitor="val_loss",
-        mode="min",
+        filename=f"weights_extrapolated_max_accuracy",
+        monitor="val_accuracy",
+        mode="max",
         save_top_k=1
     )
     # early_stopping_cb = pl.callbacks.EarlyStopping(
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     # 🚀 Train
     # -----------------------------
     trainer = pl.Trainer(
-        max_epochs=30,
+        max_epochs=50,
         logger=logger_csv,
         callbacks=[checkpoint_cb], #, early_stopping_cb],
         enable_progress_bar=True,
