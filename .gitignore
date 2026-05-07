@@ -8,6 +8,7 @@
 datasets/
 FINAL_MODELS/
 EXPERIMENTS/
+plots/
 
 # Python cache (recursive — covers ALL folders)
 __pycache__/

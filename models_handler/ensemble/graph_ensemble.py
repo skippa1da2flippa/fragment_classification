@@ -139,11 +139,12 @@ class GraphEnsemble(BaseEnsemble):
             chosen_lr_patches, other_patches, chosen_ids = get_basked_representation(
                 ensemble_logits_t=learners_logits, 
                 ensemble_patches_t=learners_embedding,
-                choice=self.hparams.decision_mode
+                choice=self.hparams.decision_mode, 
+                random_choice=False
             )
 
             mask_map: Tensor = chosen_ids == self.hparams.mask_on_learner
-            # TODO higly inefficient remove the for and put just matrixmultiplication
+            # TODO higly inefficient remove the for and put just matrix multiplication
             for sample_idx, (elem_msk, c_id) in enumerate(zip(mask_map, chosen_ids)):
                 if elem_msk:
                     valid_patch_mask.append(

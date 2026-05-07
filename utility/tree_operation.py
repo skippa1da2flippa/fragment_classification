@@ -27,7 +27,7 @@ def get_parition_lca_from_percentage2(tree: BPT, percentage: float = 0.3, min_ma
         f"try with a bigger min_margin w.r.t the actual: {min_margin}"
     )
 
-def get_parition_lca_from_percentage(tree: BPT, percentage: float = 0.3, min_margin: float = 0.1) -> list[list[float]]:
+def get_partition_lca_from_percentage(tree: BPT, percentage: float = 0.3, min_margin: float = 0.1) -> list[list[float]]:
     patch_num: int = tree.total_leaves
     closest_level = None
     min_diff = float('inf')
@@ -69,7 +69,7 @@ def get_adjacency_from_BPT(
     margin: float = 0.1
 ) -> Tensor:
     
-    data: list[list[float]] = get_parition_lca_from_percentage(
+    data: list[list[float]] = get_partition_lca_from_percentage(
         tree=tree,
         percentage=percentage,
         min_margin=margin

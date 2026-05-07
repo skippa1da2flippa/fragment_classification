@@ -2,7 +2,7 @@ from torch import Tensor
 import torch
 import torch.nn as nn
 from loss_function.kl_sup_con_loss import KL_ContrastiveLoss
-from utility.utility import CleopatraInput, CleopatraOut, HeadType
+from utility.utility import CleopatraEnsembleInput, CleopatraInput, CleopatraOut, HeadType
 from models_handler.transformer.vit import VitClassifier
 import torch.nn.functional as F
 import math
@@ -13,7 +13,7 @@ class KlVIT(VitClassifier):
         self,
         backbone_type: str,
         head_type: str,
-        double_head: bool = True,
+        double_head: bool = False,
         lr: float = 1e-4,
         weight_decay: float = 1e-4,
         min_epochs_head: int = 5,
@@ -61,9 +61,9 @@ class KlVIT(VitClassifier):
 
     def double_head_handler(
         self, 
-        batch: CleopatraInput
+        batch: CleopatraEnsembleInput
     ) -> tuple[Tensor, Tensor]:
-        img, _, _ = batch
+        img, _, _, _ = batch
         res: Tensor = super().predict_embedding(img)
 
         match self.hparams.head_type:
@@ -88,11 +88,11 @@ class KlVIT(VitClassifier):
 
     def base_step(
         self, 
-        batch: CleopatraInput, 
+        batch: CleopatraEnsembleInput, 
         step_type: str = "train"
     ) -> CleopatraOut:
 
-        img, _, label = batch
+        img, label, mask, _ = batch
 
         weights = self.loss_weights if step_type == "train" else torch.ones_like(self.loss_weights) 
         
@@ -102,7 +102,7 @@ class KlVIT(VitClassifier):
             )
 
         else:
-            ce_logits = kl_logits = self.__call__(img)
+            ce_logits = kl_logits = self.__call__(img, mask)
 
         kl_loss: Tensor = self.kl_loss(
             input=kl_logits, 

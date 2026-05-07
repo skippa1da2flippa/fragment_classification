@@ -1,5 +1,5 @@
 import os
-from typing import Callable
+from typing import Callable, Literal
 import optuna as op 
 import pytorch_lightning as pl
 import torch
@@ -219,9 +219,11 @@ def the_chosen(
         alpha = trial.suggest_categorical("alpha_loss", [0.5, 1, 1.5, 2, 3])
         beta = trial.suggest_categorical("beta_loss", [0.5, 1, 1.5, 2, 3])
         kl_symmetric = trial.suggest_categorical("kl_symmetric", [True, False])
-        kl_reduction = trial.suggest_categorical("kl_reduction", ["mean", "sum"]) 
-        ce_minimum_epoch = trial.suggest_categorical("ce_minimum_epoch", [1, 2, 3, 4]) 
+        kl_reduction = trial.suggest_categorical("kl_reduction", ["sum"]) 
+        min_epoch_head = trial.suggest_categorical("min_epoch_head", [1, 2]) 
+        ce_minimum_epoch = trial.suggest_categorical("ce_minimum_epoch", [2, 3, 4]) 
         temperature = trial.suggest_categorical("kl_temperature", [6., 7, 7.5, 8, 9, 9.5, 10])
+        head_type =  trial.suggest_categorical("head_vit_agg", ["CLS_SINGLE", "SEQ_ENSEMBLE"])
 
         body = {
             "backbone_type": backbone_type,
@@ -236,6 +238,8 @@ def the_chosen(
             "ce_minimum_epoch": ce_minimum_epoch,
             "temperature": temperature,
             "p_plus": p_plus,
+            "head_type": head_type,
+            "min_epochs_head": min_epoch_head,
             **model_params
         }
 
@@ -244,7 +248,6 @@ def the_chosen(
             **body
         )
 
-        head_type = model_params["head_type"]
 
         # CSV logger
         logger_csv = CSVLogger(
@@ -255,12 +258,12 @@ def the_chosen(
         check_point_saver = pl.callbacks.ModelCheckpoint(
             dirpath=f'{out_dir}\\checkpoints_{head_type}', 
             filename=f"weights", 
-            monitor='val_loss', 
-            mode='min'
+            monitor='val_accuracy', 
+            mode='max'
         )
         early_stopping_cb = pl.callbacks.EarlyStopping(
-            monitor="kl_val_loss",     # Metric to monitor
-            mode="min",             # "min" for loss, "max" for accuracy/F1
+            monitor="val_accuracy",     # Metric to monitor
+            mode="max",             # "min" for loss, "max" for accuracy/F1
             patience=5,             # Number of epochs with no improvement
             min_delta=1e-3,         # Required improvement threshold
             verbose=True
@@ -294,6 +297,7 @@ def ensemble_graph_wrapper(
     decision_mode: str,
     bs_path: str,
     num_epoch: int = 30,
+    optimization_mode: Literal["min", "max"] = "min", 
     gnn_name: str = ""
 ) -> callable:
     """
@@ -317,21 +321,21 @@ def ensemble_graph_wrapper(
         gnn_type = trial.suggest_categorical(
             "gnn_type", gnn_candidates
         )
-        gnn_num_layer = trial.suggest_int("gnn_num_layer", 1, 3)
-        gnn_act_fun = trial.suggest_categorical("gnn_act_fun", ["relu", "gelu", "elu", "tanh"])
-        gnn_dropout = trial.suggest_float("gnn_dropout", 0.0, 0.6)
+        gnn_num_layer = trial.suggest_int("gnn_num_layer", 2, 3)
+        gnn_act_fun = "relu" #trial.suggest_categorical("gnn_act_fun", ["relu", "gelu", "elu", "tanh"])
+        gnn_dropout = 0.5102530062501364 # trial.suggest_float("gnn_dropout", 0.0, 0.6)
         graph_load_param = 0 # trial.suggest_float("graph_load_param", 0.1, 1)
-        use_weighted_loss = trial.suggest_categorical("use_weighted_loss", [True, False])
-        min_epoch_gnn = trial.suggest_int("min_epoch_gnn", 1, 4)
-        central_node_mode = trial.suggest_categorical("central_node_mode", ["mean", "zero"])
-        temperature = trial.suggest_float("temperature", 0.5, 9)
-        keep_temperature_stable = trial.suggest_categorical("keep_temperature_stable", [True, False])
-        threshold: float = trial.suggest_categorical("cosine_threshold", [0.5, 0.6, 0.7, 0.8])
-        learner_loss_regulizer: float = trial.suggest_categorical("learner_loss_regulizer", [0.2, 0.4, 0.6, 0.8])
+        use_weighted_loss = True # trial.suggest_categorical("use_weighted_loss", [True, False])
+        min_epoch_gnn = trial.suggest_int("min_epoch_gnn", 4, 10)
+        central_node_mode = "zero" # trial.suggest_categorical("central_node_mode", ["mean", "zero"])
+        temperature = 1.0 # trial.suggest_float("temperature", 0.5, 9)
+        keep_temperature_stable = True # trial.suggest_categorical("keep_temperature_stable", [True, False])
+        threshold: float = trial.suggest_categorical("cosine_threshold", [0.7, 0.8, 0.9])
+        learner_loss_regulizer: float = trial.suggest_categorical("learner_loss_regulizer", [0.2, 0.5, 0.8])
 
         # Optimizer params
-        lr = trial.suggest_float("lr", 1e-5, 5e-3, log=True)
-        weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
+        lr = 5.4260722871608125e-05 # trial.suggest_float("lr", 1e-5, 5e-3, log=True)
+        weight_decay = 6.819478603750867e-06 # trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
 
         # -----------------------------
         # 🧠 Create model
@@ -363,6 +367,7 @@ def ensemble_graph_wrapper(
         # 🧾 Logger + Checkpoint
         # -----------------------------
         base_path: str = os.path.join(bs_path, f"{gnn_type}")
+        opt_metric_suffix: str = "val_loss" if optimization_mode == "min" else "val_acc"
         logger_csv = CSVLogger(
             save_dir=os.path.join(base_path), 
             name=decision_mode
@@ -371,13 +376,13 @@ def ensemble_graph_wrapper(
         checkpoint_cb = pl.callbacks.ModelCheckpoint(
             dirpath=os.path.join(base_path, f"ckpt"),
             filename=f"{decision_mode}",
-            monitor=f"{gnn_type}_val_loss",
-            mode="min",
+            monitor=f"{gnn_type}_{opt_metric_suffix}",
+            mode=optimization_mode,
             save_top_k=1
         )
         early_stopping_cb = pl.callbacks.EarlyStopping(
-            monitor=f"{gnn_type}_val_loss",     # Metric to monitor
-            mode="min",             # "min" for loss, "max" for accuracy/F1
+            monitor=f"{gnn_type}_{opt_metric_suffix}",     # Metric to monitor
+            mode=optimization_mode,             # "min" for loss, "max" for accuracy/F1
             patience=5,             # Number of epochs with no improvement
             min_delta=1e-4,         # Required improvement threshold
             verbose=False
@@ -401,7 +406,8 @@ def ensemble_graph_wrapper(
         # 🎯 Return metric to optimize
         # -----------------------------
         # You can also return negative accuracy/F1 if you prefer maximizing
-        score = checkpoint_cb.best_model_score.item() if checkpoint_cb.best_model_score else float("inf")
+        alternative: float = float("inf") if optimization_mode == "min" else -float("inf")
+        score = checkpoint_cb.best_model_score.item() if checkpoint_cb.best_model_score else alternative
         return score
 
     return objective

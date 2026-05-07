@@ -825,13 +825,14 @@ def generate_connection_discrete(
 
     if bpt_adjacency is not None:
         bpt_adjacency = bpt_adjacency.bool() 
-        hide_cls: Tensor = torch.ones_like(bpt_adjacency)
-        hide_cls[:, 0, :] = False
-        hide_cls[:, :, 0] = False
 
         if pruned:
             edge_mask = (bpt_adjacency & edge_mask)  
         else:
+            hide_cls: Tensor = torch.ones_like(bpt_adjacency)
+            hide_cls[:, 0, :] = False
+            hide_cls[:, :, 0] = False
+            
             edge_mask = (bpt_adjacency & hide_cls) | (bpt_adjacency & edge_mask) 
 
     edge_mask = add_central_nodes_connection(edge_mask=edge_mask)
@@ -1003,8 +1004,14 @@ def multiple_generate_connection_discrete(
     )
 
 
+def entropy_from_logits(logits: Tensor, dim: int = -1, eps: float = 1e-12) -> Tensor:
+    probs: Tensor = F.softmax(logits, dim=dim)
+    log_probs: Tensor = torch.log(probs.clamp_min(eps))
 
-def get_least_idx(ensamble_prediction_t: Tensor, most_used_values: Tensor) -> Tensor:
+    return -(probs * log_probs).sum(dim=dim)
+
+# TODO instead of randomly picking a model we can bring the one with the highest entropy (most uncertain)
+def get_least_idx(ensamble_prediction_t: Tensor, most_used_values: Tensor, random_choice: bool = True) -> Tensor:
 
     least_used_map: Tensor = ensamble_prediction_t != most_used_values.unsqueeze(dim=-1)
 
@@ -1015,7 +1022,14 @@ def get_least_idx(ensamble_prediction_t: Tensor, most_used_values: Tensor) -> Te
 
     # assign a random learner to the rows with no True
     no_true: Tensor = ~least_used_map.any(dim=1)
-    last_idx[no_true] = random.randint(0, ensamble_prediction_t.shape[1] - 1)
+
+    if random_choice:
+        last_idx[no_true] = random.randint(0, ensamble_prediction_t.shape[1] - 1)
+    else:
+        entropy: Tensor = entropy_from_logits(ensamble_prediction_t)
+        most_uncertain_idx: Tensor = entropy.argmax(dim=1)
+
+        last_idx[no_true] = most_uncertain_idx[no_true]
 
     return last_idx
 
@@ -1023,7 +1037,8 @@ def get_least_idx(ensamble_prediction_t: Tensor, most_used_values: Tensor) -> Te
 def get_basked_representation(
     ensemble_logits_t: Tensor, 
     ensemble_patches_t: Tensor,
-    choice: Literal["least", "most"] = "least"
+    choice: Literal["least", "most"] = "least", 
+    random_choice: bool = True
 ) -> tuple[Tensor, Tensor, Tensor]:
     
     ensemble_prediction: Tensor = ensemble_logits_t.argmax(dim=-1) # b x n_models
@@ -1032,7 +1047,8 @@ def get_basked_representation(
     if choice == "least":
         chosen_idx = get_least_idx(
             ensamble_prediction_t=ensemble_prediction, 
-            most_used_values=most_used_values
+            most_used_values=most_used_values, 
+            random_choice=random_choice
         )
 
     else:

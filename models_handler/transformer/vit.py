@@ -77,8 +77,8 @@ class VitClassifier(BaseLearner):
 
         # Metrics — Lightning will handle aggregation & reset
         self.val_accuracy: tm.Metric = tm.Accuracy(task="multiclass", num_classes=k_classes) 
-        self.val_f1: tm.Metric = tm.F1Score(task="multiclass", num_classes=k_classes) 
-        self.val_auc: tm.Metric = tm.AUROC(task="multiclass", num_classes=k_classes) 
+        self.val_f1: tm.Metric = tm.F1Score(task="multiclass", num_classes=k_classes, average="macro") 
+        self.val_auc: tm.Metric = tm.AUROC(task="multiclass", num_classes=k_classes, average="macro") 
 
         # List of prediction for the test set
         self.test_distribution: list[Tensor] = []

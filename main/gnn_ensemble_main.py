@@ -1,5 +1,4 @@
 import json
-
 import optuna
 from pytorch_lightning.loggers import CSVLogger
 import pytorch_lightning as pl
@@ -25,7 +24,7 @@ if __name__ == "__main__":
         use_test=True
     )"""
 
-    """for bpt_percentage in [0.4, 0.5, 0.7, 0.9]:
+    for bpt_percentage in [0.7, 0.9]:
         data_module = init_data_module_ensemble_bpt(
             data_dirs_img=[
                 os.path.join(base_dataset_path, "fragment_dataset"),
@@ -36,7 +35,7 @@ if __name__ == "__main__":
                 os.path.join(base_dataset_path, "BPT_extrapolated_dataset")
             ],
             num_workers=10, 
-            batch_size=80, 
+            batch_size=50, 
             use_test=True,
             bpt_percentage=bpt_percentage
         )
@@ -56,21 +55,22 @@ if __name__ == "__main__":
             )
         ]
 
-        base_exp_path: str = f"EXPERIMENTS\\BPT\\{bpt_percentage}"
+        base_exp_path: str = f"EXPERIMENTS\\BPT_THIRD_RUN\\{bpt_percentage}"
         f = ensemble_graph_wrapper(
             datamodule=data_module,
             model_paths=model_paths,
             model_types=VitClassifier,
             decision_mode="least",
             bs_path=base_exp_path,
-            num_epoch=20,
-            gnn_name="GAT"
+            num_epoch=25,
+            gnn_name="GAT",
+            optimization_mode="max"
         )
 
-        study = optuna.create_study(direction="minimize")  
+        study = optuna.create_study(direction="maximize")  
         study.optimize(
             func=f, 
-            n_trials=10, 
+            n_trials=8, 
             n_jobs=1
         ) 
         print(f"Best hyperparameters for Graph ensemble: --->", study.best_params)
@@ -89,7 +89,7 @@ if __name__ == "__main__":
                 }, 
                 fp=f, 
                 indent=4
-            )"""
+            )
     
     """base = "EXPERIMENTS\\CONTINUATION_BEST_03_RIGHT"
     model = GraphEnsemble.load_from_checkpoint(
@@ -98,78 +98,78 @@ if __name__ == "__main__":
         weights_only=False
     )"""
 
-    for bpt_per in [0.7, 0.7, 0.7]:
-        data_module = init_data_module_ensemble_bpt(
-            data_dirs_img=[
-                os.path.join(base_dataset_path, "fragment_dataset"),
-                os.path.join(base_dataset_path, "extrapolated_dataset")
-            ], 
-            data_dirs_bpt=[
-                os.path.join(base_dataset_path, "BPT_fragment_dataset"),
-                os.path.join(base_dataset_path, "BPT_extrapolated_dataset")
-            ],
-            num_workers=10, 
-            batch_size=50, 
-            use_test=True,
-            bpt_percentage=bpt_per
-        )
-        model = GraphEnsemble(
-            **{
-                "central_node_mode": "zero",
-                "cosine_threshold": 0.8,
-                "decision_mode": "least",
-                "edge_creation_mode": "upper",
-                "final_head_size": 11,
-                "full_dataset": True,
-                "gnn_act_fun": "relu",
-                "gnn_dropout": 0.5102530062501364,
-                "gnn_num_layer": 2, 
-                "gnn_type": "GAT",
-                "graph_load_param": 0,
-                "initial_emb_size": 768,
-                "keep_temperature_stable": True,
-                "learner_loss_regulizer": 0.2,
-                "learners_name": ["base_vit", "extr_vit", "mskd_vit"],
-                "lr": 5.4260722871608125e-05,
-                "mask_on_learner": 2,
-                "min_epoch_gnn": 3,
-                "model_dataset_info": [0, 1, 0],
-                "model_types": VitClassifier,
-                "temperature": 1.2460245259956821,
-                "use_weighted_loss": True,
-                "weight_decay": 6.819478603750867e-06
-            }
-        )
+    # for bpt_per in [0.7, 0.7, 0.7]:
+    #     data_module = init_data_module_ensemble_bpt(
+    #         data_dirs_img=[
+    #             os.path.join(base_dataset_path, "fragment_dataset"),
+    #             os.path.join(base_dataset_path, "extrapolated_dataset")
+    #         ], 
+    #         data_dirs_bpt=[
+    #             os.path.join(base_dataset_path, "BPT_fragment_dataset"),
+    #             os.path.join(base_dataset_path, "BPT_extrapolated_dataset")
+    #         ],
+    #         num_workers=10, 
+    #         batch_size=50, 
+    #         use_test=True,
+    #         bpt_percentage=bpt_per
+    #     )
+    #     model = GraphEnsemble(
+    #         **{
+    #             "central_node_mode": "zero",
+    #             "cosine_threshold": 0.8, 
+    #             "decision_mode": "least",
+    #             "edge_creation_mode": "upper",
+    #             "final_head_size": 11,
+    #             "full_dataset": True,
+    #             "gnn_act_fun": "relu",
+    #             "gnn_dropout": 0.5102530062501364,
+    #             "gnn_num_layer": 2, 
+    #             "gnn_type": "GAT",
+    #             "graph_load_param": 0,
+    #             "initial_emb_size": 768,
+    #             "keep_temperature_stable": True,
+    #             "learner_loss_regulizer": 0.2, # TODO change back to 0.2
+    #             "learners_name": ["base_vit", "extr_vit", "mskd_vit"],
+    #             "lr": 5.4260722871608125e-05,
+    #             "mask_on_learner": 2,
+    #             "min_epoch_gnn": 3,
+    #             "model_dataset_info": [0, 1, 0],
+    #             "model_types": VitClassifier,
+    #             "temperature": 1.2460245259956821,
+    #             "use_weighted_loss": True,
+    #             "weight_decay": 6.819478603750867e-06
+    #         }
+    #     )
 
-        model_name = f"PRUNED_BEST_0{int(bpt_per * 10)}_RIGHT"
-        base = f"EXPERIMENTS\\{model_name}"
+    #     model_name = f"PRUNED_BEST_0{int(bpt_per * 10)}_alpha_.08_RIGHT"
+    #     base = f"EXPERIMENTS\\{model_name}"
 
-        # CSV logger
-        logger_csv = CSVLogger(
-            save_dir=os.path.join(base, "Graph_ENSEMBLE_logs"),
-            name=f"Graph",
-        )
+    #     # CSV logger
+    #     logger_csv = CSVLogger(
+    #         save_dir=os.path.join(base, "Graph_ENSEMBLE_logs"),
+    #         name=f"Graph",
+    #     )
 
-        checkpoint_cb = pl.callbacks.ModelCheckpoint(
-            dirpath=os.path.join(base, "Graph_ENSEMBLE_CHKT"),
-            filename=f"Graph_ENSEMBLE",
-            monitor="GAT_val_acc",
-            mode="max",
-            save_top_k=1
-        )
-        trainer = pl.Trainer(
-            max_epochs=50,
-            logger=logger_csv,
-            callbacks=[checkpoint_cb], #early_stopping_cb],
-            enable_progress_bar=True,
-            accelerator="auto",
-            devices=1
-        )
+    #     checkpoint_cb = pl.callbacks.ModelCheckpoint(
+    #         dirpath=os.path.join(base, "Graph_ENSEMBLE_CHKT"),
+    #         filename=f"Graph_ENSEMBLE",
+    #         monitor="GAT_val_acc",
+    #         mode="max",
+    #         save_top_k=1
+    #     )
+    #     trainer = pl.Trainer(
+    #         max_epochs=50,
+    #         logger=logger_csv,
+    #         callbacks=[checkpoint_cb], #early_stopping_cb],
+    #         enable_progress_bar=True,
+    #         accelerator="auto",
+    #         devices=1
+    #     )
 
-        trainer.fit(
-            model=model, 
-            datamodule=data_module
-        )
+    #     trainer.fit(
+    #         model=model, 
+    #         datamodule=data_module
+    #     )
 
 
     # for w in [0.6, 0.7, 0.8, 0.9]:
