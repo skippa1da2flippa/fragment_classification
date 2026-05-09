@@ -4,10 +4,19 @@ from pytorch_lightning.loggers import CSVLogger
 import pytorch_lightning as pl
 from dataset_handler.frag import init_data_module_ensemble, init_data_module_ensemble_bpt
 from models_handler.ensemble.graph_ensemble import GraphEnsemble
+from models_handler.transformer.kl_vit import KlVIT
 from models_handler.transformer.vit import VitClassifier
 import os
-from training.optuna_hyper import ensemble_graph_wrapper 
+from training.optuna_hyper import ensemble_graph_wrapper
+from utility.utility import load_json 
 
+
+# TODO here you are doing hyper-param search on the valid set
+# using the KL implementation since are trained just on the train 
+# but the loss applied to these three model is CE not it's own native
+# loss, and the optuna study is maximizing the accuracy.
+# The param `full_dataset` was also mistakenly left to true so think 
+# about the consequences
 
 if __name__ == "__main__":
 
@@ -24,7 +33,7 @@ if __name__ == "__main__":
         use_test=True
     )"""
 
-    for bpt_percentage in [0.7, 0.9]:
+    for bpt_percentage in [0.9]:
         data_module = init_data_module_ensemble_bpt(
             data_dirs_img=[
                 os.path.join(base_dataset_path, "fragment_dataset"),
@@ -40,56 +49,151 @@ if __name__ == "__main__":
             bpt_percentage=bpt_percentage
         )
 
+        # model_paths = [
+        #     (
+        #         "FINAL_MODELS\\final_VIT\\FINAL_VIT_CHKT\\weights.ckpt", 
+        #         "FINAL_MODELS\\final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv\\version_0\\hparams.yaml"
+        #     ), 
+        #     (
+        #         "FINAL_MODELS\\final_VIT\\FINAL_VIT_CHKT\\weights_extrapolated-v2.ckpt",
+        #         "FINAL_MODELS\\final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_extrapolated\\version_4\\hparams.yaml"
+        #     ),
+        #     (
+        #         "FINAL_MODELS\\final_VIT\\FINAL_VIT_CHKT\\weights_masked_head_upd_wo_CLS.ckpt",
+        #         "FINAL_MODELS\\final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_masked_head_upd_wo_CLS\\version_1\\hparams.yaml"
+        #     )
+        # ]
+
         model_paths = [
             (
-                "FINAL_MODELS\\final_VIT\\FINAL_VIT_CHKT\\weights.ckpt", 
-                "FINAL_MODELS\\final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv\\version_0\\hparams.yaml"
+                "EXPERIMENTS\\VALID_CLS_LOSS_KL_LOSS_FRAG\\checkpoints_SEQ_ENSEMBLE\\weights-v1.ckpt", 
+                "EXPERIMENTS\VALID_CLS_LOSS_KL_LOSS_FRAG\\logs_SEQ_ENSEMBLE\csv\\version_1\\hparams.yaml"
             ), 
             (
-                "FINAL_MODELS\\final_VIT\\FINAL_VIT_CHKT\\weights_extrapolated-v2.ckpt",
-                "FINAL_MODELS\\final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_extrapolated\\version_4\\hparams.yaml"
+                "EXPERIMENTS\\VALID_CLS_LOSS_KL_LOSS_EXTR\\checkpoints_SEQ_ENSEMBLE\\weights-v1.ckpt",
+                "EXPERIMENTS\\VALID_CLS_LOSS_KL_LOSS_EXTR\\logs_SEQ_ENSEMBLE\csv\\version_1\\hparams.yaml"
             ),
             (
-                "FINAL_MODELS\\final_VIT\\FINAL_VIT_CHKT\\weights_masked_head_upd_wo_CLS.ckpt",
-                "FINAL_MODELS\\final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_masked_head_upd_wo_CLS\\version_1\\hparams.yaml"
+                "EXPERIMENTS\\VALID_CLS_LOSS_KL_LOSS_mskd\\checkpoints_SEQ_ENSEMBLE\\weights.ckpt",
+                "EXPERIMENTS\\VALID_CLS_LOSS_KL_LOSS_mskd\\logs_SEQ_ENSEMBLE\\csv\\version_0\\hparams.yaml"
             )
         ]
 
-        base_exp_path: str = f"EXPERIMENTS\\BPT_THIRD_RUN\\{bpt_percentage}"
-        f = ensemble_graph_wrapper(
-            datamodule=data_module,
+        base_exp_path: str = f"EXPERIMENTS\\FINAL_BPT_KL_LOSS\\{bpt_percentage}"
+        # f = ensemble_graph_wrapper(
+        #     datamodule=data_module,
+        #     model_paths=model_paths,
+        #     model_types=KlVIT,
+        #     decision_mode="least",
+        #     bs_path=base_exp_path,
+        #     num_epoch=25,
+        #     gnn_name="GAT",
+        #     optimization_mode="max"
+        # )
+
+        # study = optuna.create_study(direction="maximize")  
+        # study.optimize(
+        #     func=f, 
+        #     n_trials=8, 
+        #     n_jobs=1
+        # ) 
+
+        base_best_param_path: str = os.path.join("EXPERIMENTS", "VALID_BPT_KL_LOSS_entropy")
+        best_param_path: str = os.path.join(base_best_param_path, str(bpt_percentage), "result.json")
+
+        data: dict = load_json(best_param_path)
+        params: dict = data["data"]
+
+        gnn_type = params["gnn_type"]
+        gnn_num_layer = params["gnn_num_layer"]
+        gnn_act_fun = "relu" 
+        gnn_dropout = 0.5102530062501364 
+        graph_load_param = 0 
+        use_weighted_loss = True 
+        min_epoch_gnn = params["min_epoch_gnn"]
+        central_node_mode = "zero" 
+        temperature = 1.0 
+        keep_temperature_stable = True 
+        threshold: float = params["cosine_threshold"]
+        learner_loss_regulizer: float = params["learner_loss_regulizer"]
+
+        # Optimizer params
+        lr = 5.4260722871608125e-05 
+        weight_decay = 6.819478603750867e-06 
+
+        model = GraphEnsemble(
+            model_types=KlVIT,
+            model_dataset_info=[0, 1, 0],
+            gnn_type=gnn_type, 
+            gnn_num_layer=gnn_num_layer, 
             model_paths=model_paths,
-            model_types=VitClassifier,
-            decision_mode="least",
-            bs_path=base_exp_path,
-            num_epoch=25,
-            gnn_name="GAT",
-            optimization_mode="max"
+            learner_loss_regulizer=learner_loss_regulizer,
+            decision_mode="least", 
+            learners_name= [
+                "base_vit_KL", 
+                "extr_vit_KL",
+                "mskd_vit_KL"
+            ], 
+            min_epoch_gnn=min_epoch_gnn, 
+            gnn_dropout=gnn_dropout,
+            gnn_act_fun=gnn_act_fun, 
+            use_weighted_loss=use_weighted_loss, 
+            full_dataset=True, 
+            lr=lr,
+            weight_decay=weight_decay,
+            temperature=temperature,
+            cosine_threshold=threshold,
+            keep_temperature_stable=True, 
+            edge_creation_mode="upper"
         )
 
-        study = optuna.create_study(direction="maximize")  
-        study.optimize(
-            func=f, 
-            n_trials=8, 
-            n_jobs=1
-        ) 
-        print(f"Best hyperparameters for Graph ensemble: --->", study.best_params)
-        out_path = os.path.join(
-            base_exp_path, 
-            "result.json"
+        model_name = f"FINAL_BPT_KL_{bpt_percentage}"
+        base = f"EXPERIMENTS\\{model_name}"
+
+        # CSV logger
+        logger_csv = CSVLogger(
+            save_dir=os.path.join(base, "Graph_ENSEMBLE_logs"),
+            name=f"Graph_with_random",
         )
 
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        checkpoint_cb = pl.callbacks.ModelCheckpoint(
+            dirpath=os.path.join(base, "Graph_ENSEMBLE_CHKT"),
+            filename=f"Graph_ENSEMBLE_random",
+            monitor="GAT_val_acc",
+            mode="max",
+            save_top_k=1
+        )
+        trainer = pl.Trainer(
+            max_epochs=50,
+            logger=logger_csv,
+            callbacks=[checkpoint_cb], #early_stopping_cb],
+            enable_progress_bar=True,
+            accelerator="auto",
+            devices=1
+        )
+
+        trainer.fit(
+            model=model, 
+            datamodule=data_module
+        )
+
+        # print(f"Best hyperparameters for Graph ensemble: --->", study.best_params)
+        # out_path = os.path.join(
+        #     base_exp_path, 
+        #     "result.json"
+        # )
+
+        # os.makedirs(os.path.dirname(out_path), exist_ok=True)
         
-        with open(out_path, "w") as f:
-            json.dump(
-                obj={
-                    "data": study.best_params, 
-                    "test_loss": study.best_value
-                }, 
-                fp=f, 
-                indent=4
-            )
+        # with open(out_path, "w") as f:
+        #     json.dump(
+        #         obj={
+        #             "data": study.best_params, 
+        #             "test_loss": study.best_value
+        #         }, 
+        #         fp=f, 
+        #         indent=4
+        #     )
     
     """base = "EXPERIMENTS\\CONTINUATION_BEST_03_RIGHT"
     model = GraphEnsemble.load_from_checkpoint(

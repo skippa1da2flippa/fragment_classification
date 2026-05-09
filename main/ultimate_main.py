@@ -20,7 +20,8 @@ if __name__ == "__main__":
         num_workers=12,
         sampler=False, 
         use_test=True, 
-        use_masked_vit=True 
+        use_masked_vit=True, 
+        use_contourn=True
     )
 
     model = KlVIT(
@@ -44,8 +45,8 @@ if __name__ == "__main__":
             "lr": 0.00025216319989695046,
             "weight_decay": 6.129110631586137e-05,
             "use_weighted_loss": False,
-            "alpha": 1, # TODO rimetti 3
-            "beta": 3, # TODO rimetti 2
+            "alpha": 0.5, # TODO rimetti 3
+            "beta": 1, # TODO rimetti 2
             "kl_symmetric": True, # TODO rimetti true
             "kl_reduction": "sum",
             "min_epochs_head": 2,

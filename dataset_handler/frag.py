@@ -801,7 +801,7 @@ def init_data_module(
     sampler=False, 
     use_test: bool = False, 
     use_masked_vit: bool = False, 
-    use_contourn: bool = False,
+    use_contourn: bool = True,
     return_name: bool = False
 ):
     train_paths, train_labels = load_paths_and_labels(os.path.join(data_dir, 'train'))
@@ -917,7 +917,7 @@ def init_data_module_ensemble_bpt(
     num_workers: int = 4, 
     use_test: bool = False, 
     use_masked_vit_on: int = 0, 
-    use_contourn: bool = False
+    use_contourn: bool = True
 ):
     train_dbs_img: list[list[str]] = []
     val_dbs_img: list[list[str]] = []

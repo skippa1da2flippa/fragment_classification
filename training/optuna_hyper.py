@@ -293,7 +293,7 @@ def the_chosen(
 def ensemble_graph_wrapper(
     datamodule: pl.LightningDataModule,
     model_paths: list[tuple[str, str]], 
-    model_types: type[BaseEnsemble],
+    model_types: type[BaseEnsemble] | list[type[BaseEnsemble]],
     decision_mode: str,
     bs_path: str,
     num_epoch: int = 30,

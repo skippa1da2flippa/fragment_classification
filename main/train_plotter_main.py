@@ -49,6 +49,27 @@ if __name__ == "__main__":
     pruned_9_max_acc: str = "EXPERIMENTS\\UNPRUNED_BEST_07_RIGHT_max_acc\\Graph_ENSEMBLE_logs\\Graph\\version_1\\metrics.csv"
     pruned_name_9_max_acc: str = "pruned_7_.2_max_acc"
 
+    bpt_3 = "EXPERIMENTS\\FINAL_BPT_KL_0.3\\Graph_ENSEMBLE_logs\\Graph\\version_1\\metrics.csv"
+    bpt_3_name = "bpt 0.3"
+
+    bpt_7 = "EXPERIMENTS\\FINAL_BPT_KL_0.7\\Graph_ENSEMBLE_logs\\Graph\\version_0\\metrics.csv"
+    bpt_7_name = "bpt 0.7"
+
+    bpt_9 = "EXPERIMENTS\\FINAL_BPT_KL_0.9\\Graph_ENSEMBLE_logs\\Graph\\version_0\\metrics.csv"
+    bpt_9_name = "bpt 0.9"
+
+    bpt_9_max = "EXPERIMENTS\\FINAL_BPT_KL_0.9\\Graph_ENSEMBLE_logs\\Graph_with_min_entropy\\version_0\\metrics.csv"
+    bpt_9_name_max = "bpt 0.9 max"
+
+    bpt_random_9_a = "EXPERIMENTS\\FINAL_BPT_KL_0.9\\Graph_ENSEMBLE_logs\\Graph_with_random\\version_0\\metrics.csv"
+    bpt_random_9_a_name = "bpt 0.9 random a)"
+
+    bpt_random_9_b = "EXPERIMENTS\\FINAL_BPT_KL_0.9\\Graph_ENSEMBLE_logs\\Graph_with_random\\version_1\\metrics.csv"
+    bpt_random_9_b_name = "bpt 0.9 random b)"
+
+    bpt_random_9_c = "EXPERIMENTS\\FINAL_BPT_KL_0.9\\Graph_ENSEMBLE_logs\\Graph_with_random\\version_2\\metrics.csv"
+    bpt_random_9_c_name = "bpt 0.9 random c)"
+    
     #plot_accuracy_curves(
     #    csv_paths=[unpruned, pruned, pruned_5, pruned_7, pruned_9, base_line_best],
     #    names=[unpruned_name, pruned_name, pruned_name_5, pruned_name_7, pruned_name_9, base_line_best_pruned_name], 
@@ -56,7 +77,7 @@ if __name__ == "__main__":
     #)
 
     plot_accuracy_curves(
-        csv_paths=[pruned_7_max_acc, pruned_9_max_acc, base_line_best],
-        names=[pruned_name_7_max_acc, pruned_name_9_max_acc, base_line_best_pruned_name], 
-        plot_name="With_08_pruned_max_acc.png"
+        csv_paths=[bpt_9, bpt_random_9_a, bpt_random_9_b, bpt_random_9_c],
+        names=[bpt_9_name, bpt_random_9_a_name, bpt_random_9_b_name, bpt_random_9_c_name], 
+        plot_name="plots\\KL_GNN_BPT_3.png"
     )

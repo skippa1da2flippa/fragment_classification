@@ -1010,10 +1010,16 @@ def entropy_from_logits(logits: Tensor, dim: int = -1, eps: float = 1e-12) -> Te
 
     return -(probs * log_probs).sum(dim=dim)
 
-# TODO instead of randomly picking a model we can bring the one with the highest entropy (most uncertain)
-def get_least_idx(ensamble_prediction_t: Tensor, most_used_values: Tensor, random_choice: bool = True) -> Tensor:
 
-    least_used_map: Tensor = ensamble_prediction_t != most_used_values.unsqueeze(dim=-1)
+def get_least_idx(
+    ensemble_logits: Tensor, 
+    ensemble_prediction: Tensor,
+    random_choice: bool = True
+) -> Tensor:
+
+    most_used_values, _ = torch.mode(ensemble_prediction, dim=-1)
+    least_used_map: Tensor = ensemble_prediction != most_used_values.unsqueeze(dim=-1)
+
 
     # reverse order of each row and then argmax to get the first True
     rev_idx: Tensor = torch.flip(least_used_map, dims=[1]).int().argmax(dim=1)
@@ -1024,9 +1030,9 @@ def get_least_idx(ensamble_prediction_t: Tensor, most_used_values: Tensor, rando
     no_true: Tensor = ~least_used_map.any(dim=1)
 
     if random_choice:
-        last_idx[no_true] = random.randint(0, ensamble_prediction_t.shape[1] - 1)
+        last_idx[no_true] = random.randint(0, ensemble_prediction.shape[1] - 1)
     else:
-        entropy: Tensor = entropy_from_logits(ensamble_prediction_t)
+        entropy: Tensor = entropy_from_logits(ensemble_logits)
         most_uncertain_idx: Tensor = entropy.argmax(dim=1)
 
         last_idx[no_true] = most_uncertain_idx[no_true]
@@ -1038,16 +1044,15 @@ def get_basked_representation(
     ensemble_logits_t: Tensor, 
     ensemble_patches_t: Tensor,
     choice: Literal["least", "most"] = "least", 
-    random_choice: bool = True
+    random_choice: bool = False
 ) -> tuple[Tensor, Tensor, Tensor]:
     
     ensemble_prediction: Tensor = ensemble_logits_t.argmax(dim=-1) # b x n_models
-    most_used_values, chosen_idx = torch.mode(ensemble_prediction, dim=-1)
     
     if choice == "least":
-        chosen_idx = get_least_idx(
-            ensamble_prediction_t=ensemble_prediction, 
-            most_used_values=most_used_values, 
+        chosen_idx: Tensor = get_least_idx(
+            ensemble_logits=ensemble_logits_t,
+            ensemble_prediction=ensemble_prediction,
             random_choice=random_choice
         )
 
