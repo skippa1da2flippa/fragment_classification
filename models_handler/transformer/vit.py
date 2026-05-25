@@ -1,6 +1,5 @@
 import json
 import os
-
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -54,7 +53,8 @@ class VitClassifier(BaseLearner):
         use_weighted_loss: bool = False,
         contrastive_loss: bool = False, 
         masked_attention: bool = False, 
-        full_dataset: bool = True
+        full_dataset: bool = True, 
+        db_path: str = ""
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -71,7 +71,7 @@ class VitClassifier(BaseLearner):
         self.apply_params(
             value=False,
             module=self.backbone, 
-            exclusion_lst=["head", "norm", "patch_embed"]
+            exclusion_lst=["head", "norm"] # TODO rimetti "patch_embed"
         )
         self.forzen_blocks_map: Tensor = torch.zeros(len(self.backbone.blocks))
 
@@ -89,7 +89,8 @@ class VitClassifier(BaseLearner):
 
         if use_weighted_loss:
             weights_tensor = get_dataset_weights(
-                full_count=full_dataset
+                full_count=full_dataset, 
+                dataset_pth=db_path
             ).float()  
         else:
             weights_tensor = torch.ones(size=(k_classes,), dtype=torch.float) 
@@ -355,7 +356,7 @@ class VitClassifier(BaseLearner):
         self.apply_params(
             value=False,
             module=self.backbone, 
-            exclusion_lst=["head", "norm", "patch_embed"]
+            exclusion_lst=["head", "norm"] # TODO vedi se rimettere "patch_embed"
         )
         self.forzen_blocks_map.zero_()
 
@@ -427,13 +428,17 @@ class VitClassifier(BaseLearner):
                         p.requires_grad = True
                 else:     
                     if val_loss >= self._prev_val_loss - plateau_threshold:
-                        # unfreeze one block from head to tail
-                        last_zero = (self.forzen_blocks_map == 0).nonzero()[-1]
-                        self.forzen_blocks_map[last_zero] = 1
-                        self.apply_params( 
-                            module=self.backbone.blocks,
-                            use_block_map=True
-                        )
+                        # If all the blocks have already been unfrozen, unfreeze the conv layer
+                        if self.forzen_blocks_map.sum() == self.forzen_blocks_map.shape[0]:
+                            self.backbone.patch_embed.requires_grad_()
+                        else:
+                            # unfreeze one block from head to tail
+                            last_zero = (self.forzen_blocks_map == 0).nonzero()[-1]
+                            self.forzen_blocks_map[last_zero] = 1
+                            self.apply_params( 
+                                module=self.backbone.blocks,
+                                use_block_map=True
+                            )
 
                     self._prev_val_loss = val_loss
 
@@ -469,10 +474,26 @@ class VitClassifier(BaseLearner):
 
 
     def log_trainable_blocks(self) -> None:
+        conv_add: int = int(
+            any(p.requires_grad for p in self.backbone.patch_embed.parameters())
+        )
         self.log(
             "trainable_blocks_count", 
-            self.forzen_blocks_map.sum(), 
+            self.forzen_blocks_map.sum() + conv_add, 
             prog_bar=False, 
             on_epoch=True
         )
         
+
+def transfer_learning_load(k_classes: int, weights_pth: str, hparams_pth: str) -> VitClassifier:
+    model: VitClassifier = VitClassifier.load_from_checkpoint(
+        checkpoint_path=weights_pth,
+        hparams_file=hparams_pth
+    )
+
+    model.head = nn.Linear(
+        in_features=768, 
+        out_features=k_classes
+    )
+
+    return model

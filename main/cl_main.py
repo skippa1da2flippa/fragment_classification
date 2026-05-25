@@ -1,3 +1,5 @@
+from skimage import data_dir
+
 from dataset_handler.frag import init_data_module
 from pytorch_lightning.loggers import CSVLogger
 from models_handler.frenziness.gnn import UltimateGraphApproach
@@ -7,11 +9,11 @@ import os
 
 if __name__ == '__main__':
     data_module = init_data_module(
-        data_dir="datasets\\fragment_dataset",
-        batch_size=256, 
+        data_dir="datasets\\Square_12",
+        batch_size=200, 
         num_workers=12,
         sampler=False, 
-        use_test=True
+        use_test=False
     )
     
     # Create the model with the current set of hyperparameters
@@ -21,21 +23,22 @@ if __name__ == '__main__':
         weight_decay=4.037216149183175e-05,
         min_epochs_head=3,
         head_type="CLS_SINGLE",
-        k_classes=11, 
+        k_classes=4, 
         use_weighted_loss=False, 
-        contrastive_loss=False
+        contrastive_loss=False,
+        db_path="datasets\\Square_12"
     )
 
-    base = "final_VIT"
+    base = "final_VIT_POMPAFF_ALL"
     # CSV logger
     logger_csv = CSVLogger(
-        save_dir=f"final_VIT\\FULL_VIT_TEST_logs",
-        name=f"FINAL_VIT_csv_max_acc",
+        save_dir=f"final_VIT_POMPAFF_ALL\\FULL_VIT_TEST_SQUARE_12_logs",
+        name=f"FINAL_VIT_SQUARE_12_csv_max_acc",
     )
 
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
-        dirpath=os.path.join(base, f"FINAL_VIT_CHKT"),
-        filename=f"weights_max_acc",
+        dirpath=os.path.join(base, f"FINAL_VIT_SQUARE_12_CHKT"),
+        filename=f"weights_SQUARE_12_max_acc",
         monitor="val_accuracy",
         mode="max",
         save_top_k=1

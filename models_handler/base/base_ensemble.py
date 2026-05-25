@@ -29,6 +29,7 @@ class BaseEnsemble(LightningModule):
         lr: float = 0.01,
         weight_decay: float = 0.003,
         mask_on_learner: int = 2,
+        db_path: str = ""
     ) -> None:
         
         super().__init__()
@@ -66,7 +67,8 @@ class BaseEnsemble(LightningModule):
 
         if use_weighted_loss:
             weights_tensor: Tensor = get_dataset_weights(
-                full_count=full_dataset
+                full_count=full_dataset, 
+                dataset_pth=db_path
             )
         else:
             weights_tensor: Tensor = torch.ones(

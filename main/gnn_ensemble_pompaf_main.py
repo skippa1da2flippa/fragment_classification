@@ -36,17 +36,17 @@ if __name__ == "__main__":
     for bpt_percentage in [0.9]:
         data_module = init_data_module_ensemble_bpt(
             data_dirs_img=[
-                os.path.join(base_dataset_path, "fragment_dataset"),
-                os.path.join(base_dataset_path, "fragment_dataset_lama")
+                os.path.join(base_dataset_path, "CrossingCutsSplit"),
+                os.path.join(base_dataset_path, "CrossingCutsSplit_lama")
             ], 
             data_dirs_bpt=[
-                os.path.join(base_dataset_path, "BPT_fragment_dataset"),
-                os.path.join(base_dataset_path, "BPT_fragment_dataset_lama")
+                os.path.join(base_dataset_path, "BPT_CC"),
+                os.path.join(base_dataset_path, "BPT_CC_lama")
             ],
             num_workers=10, 
             batch_size=50, 
-            use_test=True,
-            use_contourn=False,
+            use_test=False,
+            use_contourn=True,
             bpt_percentage=bpt_percentage, 
             dynamic_bpt_percentage="none"
         )
@@ -68,16 +68,16 @@ if __name__ == "__main__":
 
         model_paths = [
             (
-                "EXPERIMENTS\\VALID_CLS_LOSS_KL_LOSS_FRAG\\checkpoints_SEQ_ENSEMBLE\\weights-v1.ckpt", 
-                "EXPERIMENTS\VALID_CLS_LOSS_KL_LOSS_FRAG\\logs_SEQ_ENSEMBLE\csv\\version_1\\hparams.yaml"
+                "POMPAF_final_VIT\\FINAL_VIT_CHKT\\weights_max_acc.ckpt", 
+                "POMPAF_final_VIT\\FULL_VIT_TEST_logs\\FINAL_VIT_csv_max_acc\\version_1\\hparams.yaml"
             ), 
             (
-                "VALID_CLEOPATRA_extr_lama\\logs_SEQ_ENSEMBLE\\ckpt\\weights-v5.ckpt",
-                "VALID_CLEOPATRA_extr_lama\\logs_SEQ_ENSEMBLE\\csv\\version_5\\hparams.yaml"
+                "POMPAF_final_VIT\\FINAL_VIT_EXTR_CHKT\\weights_max_acc.ckpt",
+                "POMPAF_final_VIT\\FULL_VIT_TEST_EXTR_logs\\FINAL_VIT_csv_max_acc\\version_0\\hparams.yaml"
             ),
             (
-                "EXPERIMENTS\\VALID_CLS_LOSS_KL_LOSS_mskd\\checkpoints_SEQ_ENSEMBLE\\weights.ckpt",
-                "EXPERIMENTS\\VALID_CLS_LOSS_KL_LOSS_mskd\\logs_SEQ_ENSEMBLE\\csv\\version_0\\hparams.yaml"
+                "POMPAF_final_VIT\\FINAL_VIT_MSKD_CHKT\\weights_max_acc.ckpt",
+                "POMPAF_final_VIT\\FULL_VIT_TEST_MSKD_logs\\FINAL_VIT_csv_max_acc\\version_1\\hparams.yaml"
             )
         ]
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         #     )
         # ]
 
-        base_exp_path: str = f"EXPERIMENTS\\FINAL_BPT_KL_LOSS\\{bpt_percentage}"
+        base_exp_path: str = f"EXPERIMENTS\\FINAL_BPT_KL_LOSS_POMPAAF\\{bpt_percentage}"
         # f = ensemble_graph_wrapper(
         #     datamodule=data_module,
         #     model_paths=model_paths,
@@ -139,7 +139,7 @@ if __name__ == "__main__":
         weight_decay = 6.819478603750867e-06 
 
         model = GraphEnsemble(
-            model_types=[KlVIT, VitClassifier, KlVIT],
+            model_types=KlVIT,
             model_dataset_info=[0, 1, 0],
             gnn_type=gnn_type, 
             gnn_num_layer=gnn_num_layer, 
@@ -148,7 +148,7 @@ if __name__ == "__main__":
             decision_mode="least", 
             learners_name= [
                 "base_vit_KL", 
-                "extr_vit_lama",
+                "extr_vit_KL",
                 "mskd_vit_KL"
             ], 
             min_epoch_gnn=min_epoch_gnn, 
@@ -162,21 +162,23 @@ if __name__ == "__main__":
             cosine_threshold=threshold,
             keep_temperature_stable=True, 
             edge_creation_mode="upper", 
-            dynamic_bpt_percentage="none"
+            dynamic_bpt_percentage="none",
+            final_head_size=4,
+            db_path=os.path.join(base_dataset_path, "CrossingCutsSplit")
         )
 
-        model_name = f"FINAL_BPT_HYBRID_{bpt_percentage}"
-        base = f"EXPERIMENTS\\{model_name}"
+        model_name = f"FINAL_BPT_KL_POMPAAF_{bpt_percentage}"
+        base = f"EXPERIMENTS_POMPAAF\\{model_name}"
 
         # CSV logger
         logger_csv = CSVLogger(
-            save_dir=os.path.join(base, "Graph_ENSEMBLE_logs"),
+            save_dir=os.path.join(base, "Graph_ENSEMBLE_POMPAAF_logs"),
             name=f"Graph_with_random",
         )
 
         checkpoint_cb = pl.callbacks.ModelCheckpoint(
-            dirpath=os.path.join(base, "Graph_ENSEMBLE_CHKT"),
-            filename=f"Graph_ENSEMBLE_random",
+            dirpath=os.path.join(base, "Graph_ENSEMBLE_POMPAAF_CHKT"),
+            filename=f"Graph_ENSEMBLE_POMPAAF_random",
             monitor="GAT_val_acc",
             mode="max",
             save_top_k=1

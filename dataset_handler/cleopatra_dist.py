@@ -10,7 +10,7 @@ def get_dataset_weights(dataset_pth: str = "", full_count: bool = True) -> Tenso
         dataset_pth = dataset_path
     
     card: dict[str, int] = get_dataset_cardinality(
-        dataset_path=dataset_path, 
+        dataset_path=dataset_pth, 
         full_count=full_count
     )
 

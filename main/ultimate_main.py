@@ -15,75 +15,84 @@ import pytorch_lightning as pl
 
 if __name__ == "__main__": 
     data_module = init_data_module(
-        data_dir="datasets\\fragment_dataset",
+        data_dir="datasets\\Square_12_lama",
         batch_size=256, 
         num_workers=12,
         sampler=False, 
-        use_test=True, 
-        use_masked_vit=True, 
-        use_contourn=True
+        use_test=False, 
+        use_masked_vit=False, 
+        use_contourn=False
     )
 
     model = KlVIT(
+    #     **{
+    #         "lr": 0.0006375877711597772,
+    #         "weight_decay": 0.001352259206961784,
+    #         "use_weighted_loss": True,
+    #         "alpha": 0.4, # TODO rimetti 3
+    #         "beta": 0.6,  # TODO rimetti 1.5
+    #         "kl_symmetric": False, # TODO rimetti true
+    #         "kl_reduction": "sum",
+    #         "min_epochs_head": 2,
+    #         "backbone_type": "VIT_16",
+    #         "ce_minimum_epoch": 2,
+    #         "temperature": 6.0,
+    #         "head_type": "SEQ_ENSEMBLE",
+    #         "double_head": False,
+    #         "k_classes": 4,
+    #         "full_dataset":  False, 
+    #         "db_path":  "datasets\\CrossingCutsSplit"
+    #     }
+
         # **{
-        #     "lr": 0.0006375877711597772,
-        #     "weight_decay": 0.001352259206961784,
-        #     "use_weighted_loss": True,
-        #     "alpha": 3, # TODO rimetti 3
-        #     "beta": 1.5,  # TODO rimetti 1.5
+        #     "lr": 0.00025216319989695046,
+        #     "weight_decay": 6.129110631586137e-05,
+        #     "use_weighted_loss": False,
+        #     "alpha": 0.4, # TODO rimetti 3
+        #     "beta": 0.6, # TODO rimetti 2
         #     "kl_symmetric": False, # TODO rimetti true
         #     "kl_reduction": "sum",
         #     "min_epochs_head": 2,
-        #     "backbone_type": "VIT_16",
-        #     "ce_minimum_epoch": 2,
-        #     "temperature": 9.5,
+        #     "ce_minimum_epoch": 3,
+        #     "temperature": 6.0,
         #     "head_type": "SEQ_ENSEMBLE",
-        #     "double_head": False
-        # }
+        #     "double_head": False,
+        #     "backbone_type": "VIT_16", 
+        #     "masked_attention": True,
+        #     "k_classes": 4,
+        #     "full_dataset":  False, 
+        #     "db_path":  "datasets\\CrossingCutsSplit"
+        # },
 
         **{
-            "lr": 0.00025216319989695046,
-            "weight_decay": 6.129110631586137e-05,
+            "lr": 0.00024583095587727533,
+            "weight_decay": 0.002044727526480959,
             "use_weighted_loss": False,
-            "alpha": 0.5, # TODO rimetti 3
-            "beta": 1, # TODO rimetti 2
-            "kl_symmetric": True, # TODO rimetti true
+            "alpha": 1.4,
+            "beta": 3.6,
+            "kl_symmetric": False,
             "kl_reduction": "sum",
             "min_epochs_head": 2,
-            "ce_minimum_epoch": 3,
-            "temperature": 7,
+            "ce_minimum_epoch": 2,
+            "temperature": 6.0,
             "head_type": "SEQ_ENSEMBLE",
-            "double_head": False,
-            "backbone_type": "VIT_16", 
-            "masked_attention": True
-        },
-
-        # **{
-        #     "lr": 0.00024583095587727533,
-        #     "weight_decay": 0.002044727526480959,
-        #     "use_weighted_loss": False,
-        #     "alpha": 3,
-        #     "beta": 2,
-        #     "kl_symmetric": False,
-        #     "kl_reduction": "sum",
-        #     "min_epochs_head": 2,
-        #     "ce_minimum_epoch": 2,
-        #     "temperature": 9.5,
-        #     "head_type": "SEQ_ENSEMBLE",
-        #     "backbone_type": "VIT_16"
-        # }
+            "backbone_type": "VIT_16",
+            "k_classes": 4,
+            "full_dataset": True, 
+            "db_path":  "datasets\\Square_12_lama"
+        }
     )
 
     base = "final_VIT"
     # CSV logger
     logger_csv = CSVLogger(
-        save_dir=f"final_VIT\\FULL_VIT_TEST_logs",
-        name=f"FINAL_VIT_KL_mskd_csv_max_acc",
+        save_dir=f"final_VIT\\FULL_VIT_TEST_POMPAF_SQUARE12_EXT_logs",
+        name=f"FINAL_VIT_KL_POMPAF_SQUARE12_EXT_csv_max_acc",
     )
 
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
-        dirpath=os.path.join(base, f"FINAL_VIT_CHKT"),
-        filename=f"weights_KL_mskd_max_acc",
+        dirpath=os.path.join(base, f"FINAL_VIT_POMPAF_SQUARE12_EXT_CHKT"),
+        filename=f"weights_KL_POMPAF_SQUARE12_EXT_max_acc",
         monitor="val_accuracy",
         mode="max",
         save_top_k=1
@@ -100,7 +109,7 @@ if __name__ == "__main__":
     # 🚀 Train
     # -----------------------------
     trainer = pl.Trainer(
-        max_epochs=70,
+        max_epochs=50,
         logger=logger_csv,
         callbacks=[checkpoint_cb], # early_stopping_cb],
         enable_progress_bar=True,

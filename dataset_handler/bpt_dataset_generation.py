@@ -16,9 +16,6 @@ def process_one_directory(input_dir: str, output_dir: str) -> None:
 
 def get_bpt_dataset(dataset_path: str, output_path: str) -> None:   
     for split in os.listdir(dataset_path):
-        if split == "test" and os.path.basename(dataset_path) == "extrapolated_dataset": # TODO remove
-            continue
-
         split_path = os.path.join(dataset_path, split)
         if not os.path.exists(split_path):
             continue

@@ -485,12 +485,12 @@ class BptEnsembleInput(NamedTuple):
     image: list[Tensor] | Tensor
     label: Tensor
     mask: Tensor
-    bpt_info: list[Tensor]
+    bpt_info: list[Tensor] | list[BPT]
     name: list[str]
 
 class EnsembleForwardInput(NamedTuple):
     batch_lst: list[Tensor]
-    bpt_info: list[Tensor] | None = None
+    bpt_info: list[Tensor] | list[BPT] | None = None
     attention_mask: Tensor | None = None
 
 class EnsembleForwardOut(NamedTuple):
@@ -1124,3 +1124,4 @@ class ActFunEnum(Enum):
 def get_style_labels(path: str = "dataset", path_epoch: str = "dataset_epoch") -> list[str]:
     return os.listdir(os.path.join(path, "train")), os.listdir(os.path.join(path_epoch, "train"))
 
+    
