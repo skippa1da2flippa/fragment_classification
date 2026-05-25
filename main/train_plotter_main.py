@@ -69,7 +69,16 @@ if __name__ == "__main__":
 
     bpt_random_9_c = "EXPERIMENTS\\FINAL_BPT_KL_0.9\\Graph_ENSEMBLE_logs\\Graph_with_random\\version_2\\metrics.csv"
     bpt_random_9_c_name = "bpt 0.9 random c)"
-    
+
+    pth_9_cout = "EXPERIMENTS\\FINAL_BPT_KL_0.9\\Graph_ENSEMBLE_logs\\Graph\\version_3\\metrics.csv"
+    pth_9_cout_name = "bpt 0.9 cout"
+
+    pth_9_max_acc = "EXPERIMENTS\\FINAL_BPT_KL_0.9\\Graph_ENSEMBLE_logs\\Graph\\version_4\\metrics.csv"
+    pth_9_max_acc_name = "Max acc bpt 9"
+
+    adaptive_per = "EXPERIMENTS\\FINAL_BPT_KL_0.9\\Graph_ENSEMBLE_logs\\Graph_with_random\\version_7\\metrics.csv"
+    adaptive_per_name = "adaptive"
+
     #plot_accuracy_curves(
     #    csv_paths=[unpruned, pruned, pruned_5, pruned_7, pruned_9, base_line_best],
     #    names=[unpruned_name, pruned_name, pruned_name_5, pruned_name_7, pruned_name_9, base_line_best_pruned_name], 
@@ -77,7 +86,7 @@ if __name__ == "__main__":
     #)
 
     plot_accuracy_curves(
-        csv_paths=[bpt_9, bpt_random_9_a, bpt_random_9_b, bpt_random_9_c],
-        names=[bpt_9_name, bpt_random_9_a_name, bpt_random_9_b_name, bpt_random_9_c_name], 
-        plot_name="plots\\KL_GNN_BPT_3.png"
+        csv_paths=[bpt_9, adaptive_per],
+        names=[bpt_9_name, adaptive_per_name], 
+        plot_name="plots\\KL_GNN_BPT_6.png"
     )

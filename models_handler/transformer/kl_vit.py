@@ -28,7 +28,9 @@ class KlVIT(VitClassifier):
         kl_symmetric: bool = True,
         ce_minimum_epoch: int = 3,
         temperature: float = 6.,
-        p_plus: bool = False
+        p_plus: bool = False,
+        full_dataset: bool = True, 
+        db_path: str = ""
     ) -> None:
         
         super().__init__(
@@ -42,6 +44,8 @@ class KlVIT(VitClassifier):
             use_weighted_loss=use_weighted_loss,
             contrastive_loss=contrastive_loss,
             masked_attention=masked_attention,
+            full_dataset = full_dataset, 
+            db_path= db_path
         )
 
         if double_head:

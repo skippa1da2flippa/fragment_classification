@@ -22,7 +22,7 @@ def just_a_wrapper(
     k_classes: int = 11, 
     contrastive_loss: bool = False, 
     masked_attention: bool = False,
-    ultimate_loss: bool = False, 
+    optimization_mode: Literal["min", "max"] = "min", 
     device: str ="cuda"
 ) -> Callable[[op.trial.Trial], float]:
 
@@ -52,46 +52,56 @@ def just_a_wrapper(
             k_classes=k_classes, 
             use_weighted_loss=use_weighted_loss, 
             contrastive_loss=contrastive_loss, 
-            masked_attention=masked_attention
+            masked_attention=masked_attention, 
+            full_dataset=False
         )
 
-        # CSV logger
+        # -----------------------------
+        # 🧾 Logger + Checkpoint
+        # -----------------------------
+        base_path: str = os.path.join(out_dir, f"logs_{head_type.name}")
+        opt_metric_suffix: str = "val_loss" if optimization_mode == "min" else "val_accuracy"
         logger_csv = CSVLogger(
-            save_dir=os.path.join(f"{out_dir}", f"logs_{head_type.name}"),
-            name=f"csv",
+            save_dir=os.path.join(base_path), 
+            name="csv"
         )
 
-        check_point_saver = pl.callbacks.ModelCheckpoint(
-            dirpath=os.path.join(f"{out_dir}", f"checkpoints_{head_type.name}"), 
-            filename=f"weights", 
-            monitor='val_loss', 
-            mode='min'
+        checkpoint_cb = pl.callbacks.ModelCheckpoint(
+            dirpath=os.path.join(base_path, f"ckpt"),
+            filename=f"weights",
+            monitor=opt_metric_suffix,
+            mode=optimization_mode,
+            save_top_k=1
         )
         early_stopping_cb = pl.callbacks.EarlyStopping(
-            monitor="val_loss",     # Metric to monitor
-            mode="min",             # "min" for loss, "max" for accuracy/F1
+            monitor=opt_metric_suffix,     # Metric to monitor
+            mode=optimization_mode,             # "min" for loss, "max" for accuracy/F1
             patience=5,             # Number of epochs with no improvement
-            min_delta=1e-3,         # Required improvement threshold
-            verbose=True
+            min_delta=1e-4,         # Required improvement threshold
+            verbose=False
         )
 
+        # -----------------------------
+        # 🚀 Train
+        # -----------------------------
         trainer = pl.Trainer(
             max_epochs=num_epoch,
             logger=logger_csv,
-            callbacks=[
-                check_point_saver,
-                early_stopping_cb
-            ],
+            callbacks=[checkpoint_cb, early_stopping_cb],
             enable_progress_bar=True,
-            accelerator=device
+            accelerator="auto",
+            devices=1
         )
 
-        trainer.fit(
-            model=model, 
-            datamodule=datamodule
-        )
+        trainer.fit(model=model, datamodule=datamodule)
 
-        return check_point_saver.best_model_score.item()
+        # -----------------------------
+        # 🎯 Return metric to optimize
+        # -----------------------------
+        # You can also return negative accuracy/F1 if you prefer maximizing
+        alternative: float = float("inf") if optimization_mode == "min" else -float("inf")
+        score = checkpoint_cb.best_model_score.item() if checkpoint_cb.best_model_score else alternative
+        return score
     
     return objective
 

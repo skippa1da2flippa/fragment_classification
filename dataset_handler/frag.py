@@ -1,3 +1,5 @@
+from typing import Literal
+
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms as T
@@ -285,7 +287,8 @@ def bpt_ensemble_collate(
     mask_on_db: int = 0,
     use_countourn: bool = False,
     bpt_percentage: float = 0.3,
-    bpt_margin: float = 0.1
+    bpt_margin: float = 0.1, 
+    dynamic_bpt_percentage: Literal["up", "down", "none"] = "none"
 ) -> BptEnsembleInput:
 
     alpha_t: list[list[Tensor]] = [[] for _ in range(len(batch))]
@@ -298,12 +301,19 @@ def bpt_ensemble_collate(
         for db_idx, (img, bpt) in enumerate(zip(elem.image, elem.bpt_info)):
             img_t[db_idx].append(img)
             alpha_t[idx].append(elem.mask[db_idx])
-            bpt_t[db_idx].append(
-                get_adjacency_from_BPT(
+
+            if dynamic_bpt_percentage == "none":
+                bpt_data: Tensor = get_adjacency_from_BPT(
                     tree=bpt,
                     percentage=bpt_percentage,
                     margin=bpt_margin
                 )
+
+            else:
+                bpt_data: BPT = bpt
+            
+            bpt_t[db_idx].append(
+                bpt_data
             )
 
         if elem.name is not None:
@@ -318,11 +328,13 @@ def bpt_ensemble_collate(
         use_countourn=use_countourn
     )
 
+    bpt_info = bpt_t if dynamic_bpt_percentage != "none" else [torch.stack(trees) for trees in bpt_t]
+
 
     return BptEnsembleInput(
         image=[torch.stack(imgs) for imgs in img_t],
         label=torch.stack(lbl_t), 
-        bpt_info=[torch.stack(trees) for trees in bpt_t],
+        bpt_info=bpt_info,
         mask=attention_weights,
         name=names_t
     )
@@ -352,13 +364,15 @@ class BptEnsembleCollate:
         mask_on_db: int = 0,
         use_countourn: bool = True,
         bpt_percentage: float = 0.3,
-        bpt_margin: float = 0.1
+        bpt_margin: float = 0.1, 
+        dynamic_bpt_percentage: Literal["up", "down", "none"] = "none"
     ) -> None:
         
         self.use_countourn: bool = use_countourn
         self.mask_on_db: int = mask_on_db
         self.bpt_percentage: float = bpt_percentage
         self.bpt_margin: float = bpt_margin
+        self.dynamic_bpt_percentage: bool = dynamic_bpt_percentage
 
     def __call__(self, batch: list[BptEnsembleDatasetPre]) -> BptEnsembleInput:
         return bpt_ensemble_collate(
@@ -366,7 +380,8 @@ class BptEnsembleCollate:
             mask_on_db=self.mask_on_db,
             use_countourn=self.use_countourn, 
             bpt_percentage=self.bpt_percentage,
-            bpt_margin=self.bpt_margin
+            bpt_margin=self.bpt_margin, 
+            dynamic_bpt_percentage=self.dynamic_bpt_percentage
         )
 
 
@@ -666,7 +681,8 @@ class BptStyleEnsembleDataModule(pl.LightningDataModule):
         masking_vit_on: int = 0,
         use_countourn: bool = False,
         bpt_percentage: float = 0.3,
-        bpt_margin: float = 0.1
+        bpt_margin: float = 0.1, 
+        dynamic_bpt_percentage: Literal["up", "down", "none"] = "none",
     ):
         super().__init__()
         self.save_hyperparameters(
@@ -699,7 +715,8 @@ class BptStyleEnsembleDataModule(pl.LightningDataModule):
             mask_on_db=masking_vit_on,
             use_countourn=use_countourn, 
             bpt_margin=bpt_margin,
-            bpt_percentage=bpt_percentage
+            bpt_percentage=bpt_percentage, 
+            dynamic_bpt_percentage=dynamic_bpt_percentage
         )
 
     def train_dataloader(self):
@@ -916,6 +933,7 @@ def init_data_module_ensemble_bpt(
     batch_size: int = 32, 
     num_workers: int = 4, 
     use_test: bool = False, 
+    dynamic_bpt_percentage: Literal["up", "down", "none"] = "none",
     use_masked_vit_on: int = 0, 
     use_contourn: bool = True
 ):
@@ -975,7 +993,8 @@ def init_data_module_ensemble_bpt(
             masking_vit_on=use_masked_vit_on,
             use_countourn=use_contourn,
             bpt_margin=bpt_margin,
-            bpt_percentage=bpt_percentage
+            bpt_percentage=bpt_percentage, 
+            dynamic_bpt_percentage=dynamic_bpt_percentage
         )
     else:
         return BptStyleEnsembleDataModule(
@@ -993,7 +1012,8 @@ def init_data_module_ensemble_bpt(
                 masking_vit_on=use_masked_vit_on,
                 use_countourn=use_contourn,
                 bpt_margin=bpt_margin,
-                bpt_percentage=bpt_percentage
+                bpt_percentage=bpt_percentage, 
+                dynamic_bpt_percentage=dynamic_bpt_percentage
             )
     
 

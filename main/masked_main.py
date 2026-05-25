@@ -59,7 +59,7 @@ if __name__ == "__main__":
     backbone_type = "VIT_16"
     contrastive_loss = False
     head_type = "SEQ_ENSEMBLE"
-    k_classes = 11
+    k_classes = 4
     lr = 7.219872467151126e-05
     masked_attention = True
     min_epochs_head = 7
@@ -68,11 +68,11 @@ if __name__ == "__main__":
     weight_decay = 0.0004909363971039878
 
     data_module = init_data_module(
-        data_dir="datasets\\fragment_dataset",
+        data_dir="datasets\\Square_12",
         batch_size=256, 
         num_workers=12,
         sampler=False, 
-        use_test=True, 
+        use_test=False, 
         use_masked_vit=True, 
         use_contourn=True
     )
@@ -83,22 +83,23 @@ if __name__ == "__main__":
         weight_decay=0.00021816569175271556,
         min_epochs_head=4,
         head_type="SEQ_ENSEMBLE",
-        k_classes=11, 
+        k_classes=4, 
         use_weighted_loss=True, 
         contrastive_loss=False, 
-        masked_attention=masked_attention
+        masked_attention=masked_attention,
+        db_path="datasets\\Square_12"
     )
 
-    base = "final_VIT"
+    base = "final_VIT_POMPAFF_ALL"
     # CSV logger
     logger_csv = CSVLogger(
-        save_dir=f"final_VIT\\FULL_VIT_TEST_logs",
-        name=f"FINAL_VIT_csv_masked_head_upd_wo_CLS_max_acc",
+        save_dir=f"final_VIT_POMPAFF_ALL\\FULL_VIT_TEST_SQUARE_12_MASKED_logs",
+        name=f"FINAL_VIT_SQUARE_12_csv_masked_head_upd_wo_CLS_max_acc",
     )
 
     checkpoint_cb = pl.callbacks.ModelCheckpoint(
-        dirpath=os.path.join(base, f"FINAL_VIT_CHKT"),
-        filename=f"weights_masked_head_upd_wo_CLS_max_acc",
+        dirpath=os.path.join(base, f"FINAL_VIT_CHKT_SQUARE_12_MASK"),
+        filename=f"weights_masked_SQUARE_12_head_upd_wo_CLS_max_acc",
         monitor="val_accuracy",
         mode="max",
         save_top_k=1

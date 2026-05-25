@@ -4,6 +4,7 @@ from torch import Tensor
 from typing import Literal, Type
 from models_handler.base.base_ensemble import BaseEnsemble
 from models_handler.base.base_learner import BaseLearner
+from utility.tree_operation import get_adjacency_from_BPT
 from utility.utility import EnsembleForwardInput, EnsembleForwardOut, GNNType, GraphGenout, generate_connection_discrete, get_basked_representation, multiple_generate_connection_discrete
 from torch_geometric.data import Batch
 
@@ -44,6 +45,7 @@ class GraphEnsemble(BaseEnsemble):
         model_dataset_info: list[int],
         gnn_type: str, 
         gnn_num_layer: int,
+        bpt_percentage: float = 0.9,
         model_paths: list[tuple[str, str]] | None = None,
         learner_loss_regulizer: float = 0.2,
         decision_mode: Literal["least", "most", "all"] = "most",
@@ -63,7 +65,9 @@ class GraphEnsemble(BaseEnsemble):
         temperature: float = 0.9, 
         edge_creation_mode: Literal["center", "upper"] = "upper",
         cosine_threshold: float = 0.7,
-        keep_temperature_stable: bool = False
+        dynamic_bpt_percentage: Literal["up", "down", "none"] = "none",
+        keep_temperature_stable: bool = False,
+        db_path: str = ""
     ) -> None:
         
         model_paths = model_path if model_paths is None else model_paths
@@ -90,7 +94,8 @@ class GraphEnsemble(BaseEnsemble):
             lr=lr,
             weight_decay=weight_decay,
             mask_on_learner=mask_on_learner, 
-            learner_loss_regulizer=learner_loss_regulizer
+            learner_loss_regulizer=learner_loss_regulizer,
+            db_path=db_path
         )
         self.save_hyperparameters(
             {
@@ -104,7 +109,9 @@ class GraphEnsemble(BaseEnsemble):
                 "model_dataset_info": model_dataset_info,
                 "gnn_num_layer": gnn_num_layer, 
                 "edge_creation_mode": edge_creation_mode,
-                "cosine_threshold": cosine_threshold
+                "cosine_threshold": cosine_threshold, 
+                "dynamic_bpt_percentage": dynamic_bpt_percentage, 
+                "bpt_percentage": bpt_percentage
             }
         )
 
@@ -114,6 +121,8 @@ class GraphEnsemble(BaseEnsemble):
                 requires_grad=keep_temperature_stable
             )
         )
+        
+        self.bpt_percentage_lst: list[float] = [0.7, 0.9] if dynamic_bpt_percentage == "up" else [0.7, 0.1]
 
 
     def forward(
@@ -156,8 +165,18 @@ class GraphEnsemble(BaseEnsemble):
                     )
 
                 if batch.bpt_info is not None:
-                    db_idx = self.hparams.model_dataset_info[c_id]
-                    bpt_adj.append(batch.bpt_info[db_idx][sample_idx])
+                    db_idx: int = self.hparams.model_dataset_info[c_id]
+                    
+                    if self.hparams.dynamic_bpt_percentage != "none":
+                        bpt_adj.append(
+                            get_adjacency_from_BPT(
+                                tree=batch.bpt_info[db_idx][sample_idx],
+                                percentage=self.hparams.bpt_percentage
+                            ).to(self.device)
+                        )
+
+                    else:
+                        bpt_adj.append(batch.bpt_info[db_idx][sample_idx])
 
 
             if len(bpt_adj) > 0:
@@ -223,5 +242,15 @@ class GraphEnsemble(BaseEnsemble):
            additional_log=additional_log
         )
     
+
+    def on_validation_epoch_end(self) -> None:
+        super().on_validation_epoch_end()
+
+        if self.hparams.dynamic_bpt_percentage != "none":
+            if self.trainer.current_epoch == self.hparams.min_epoch_handler_model + 1:
+                self.hparams.bpt_percentage = self.bpt_percentage_lst.pop(0)
+
+            if self.trainer.current_epoch == self.hparams.min_epoch_handler_model + 5:
+                self.hparams.bpt_percentage = self.bpt_percentage_lst.pop(0)
 
     
