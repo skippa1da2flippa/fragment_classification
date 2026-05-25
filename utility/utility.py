@@ -371,67 +371,60 @@ def generate_sub_edge_index(adjacencies: Tensor, x: Tensor, weighted: bool = Fal
 
 def generate_connection(
     patches_emb: Tensor, 
-    load_param: float,
-    interval_mode: int = 0,
+    temperature: nn.Parameter | None,
+    bpt_adjacency: Tensor | None = None,
+    valid_patch_mask: Tensor | None = None,
+    threshold: float = 0.7,
+    pruned: bool = True,
     device: str = "cuda"
 ) -> GraphGenout:
-    patches_emb = patches_emb / patches_emb.norm(dim=-1, keepdim=True)
-    cosine_similarities: Tensor = bmm(
-        input=patches_emb, 
-        mat2=patches_emb.transpose(dim0=1, dim1=2)
+    
+    edge_mask, _, avg_cosine_sim, std_cosine_sim = get_raw_edge_mask(
+        patches_emb=patches_emb,
+        temperature=temperature,
+        valid_patch_mask=valid_patch_mask,
+        mode="upper",
+        threshold=threshold
     )
 
-    cos_sim_sum: Tensor = cosine_similarities.sum(dim=[1, 2], keepdim=True)
-    cos_sim_sum = cos_sim_sum.squeeze(dim=-1)
-    avg_cosine_sim: Tensor = cos_sim_sum / (cosine_similarities.shape[1]**2)
+    if bpt_adjacency is not None:
+        bpt_adjacency = bpt_adjacency.bool() 
 
-    samples: Tensor = cosine_similarities.flatten(start_dim=1)
-    std_cosine_sim: Tensor = (
-        (samples - avg_cosine_sim)**2
-    ).mean(dim=1, keepdim=True).sqrt()
+        if pruned:
+            edge_mask = (bpt_adjacency & edge_mask)  
+        else:
+            hide_cls: Tensor = torch.ones_like(bpt_adjacency)
+            hide_cls[:, 0, :] = False
+            hide_cls[:, :, 0] = False
+            
+            edge_mask = (bpt_adjacency & hide_cls) | (bpt_adjacency & edge_mask) 
 
-    avg_cosine_sim = avg_cosine_sim.view(-1, 1, 1)
-    std_cosine_sim = std_cosine_sim.view(-1, 1, 1)
-    
-    if interval_mode == 0:
-        edge_mask: Tensor = (
-            avg_cosine_sim - std_cosine_sim * load_param 
-            <= cosine_similarities
-        ) & (
-            cosine_similarities
-            <= avg_cosine_sim + std_cosine_sim * load_param
-        )
-    elif interval_mode == 1: 
-        edge_mask: Tensor = (
-            cosine_similarities
-            < avg_cosine_sim - std_cosine_sim * load_param 
-        ) | (
-            cosine_similarities
-            > avg_cosine_sim + std_cosine_sim * load_param
-        )
-    else: 
-       edge_mask: Tensor = (
-            cosine_similarities
-            > avg_cosine_sim + std_cosine_sim * load_param 
-        )
-    
+
     diagonal_mask = torch.tensor(
-        [x for x in range(edge_mask.shape[1])],
+        list(range(edge_mask.shape[1])),
         device=device
     )
 
-    adjcency: Tensor = edge_mask.float()
-    adjcency[:, diagonal_mask, diagonal_mask] = 0.
+    adjacency: Tensor = edge_mask.float()
+    adjacency[:, diagonal_mask, diagonal_mask] = 0.
 
-    graph_batch: Batch = generate_sub_edge_index(
-        adjacencies=adjcency,
-        x=patches_emb
+    graph_batch: list[Data] = generate_sub_edge_index(
+        adjacencies=adjacency,
+        x=patches_emb, 
+        weighted=False
+    )
+
+    grap_density, graph_card = compute_graph_stats(
+        adjacency=adjacency, 
+        valid_patch_mask=valid_patch_mask.float() if valid_patch_mask else None
     )
 
     return GraphGenout(
         graph_batch=graph_batch,
-        avg_cosine_sim=avg_cosine_sim,
-        std_cosine_sim=std_cosine_sim
+        avg_cosine_sim=avg_cosine_sim.view(-1),
+        std_cosine_sim=std_cosine_sim.view(-1), 
+        graph_density=grap_density,
+        graph_edges_cardinality=graph_card
     )
 
 
@@ -734,13 +727,15 @@ def compute_graph_stats(adjacency: Tensor, valid_patch_mask: Tensor | None) -> t
 
 def get_raw_edge_mask(
     patches_emb: Tensor, 
-    temperature: Tensor, 
+    temperature: Tensor | None = None, 
     load_param: float = 0.5,
     adapt_load_param: bool = True,
     valid_patch_mask: Tensor | None = None, 
     mode: Literal["center", "upper"] = "center", 
     threshold: float = 0.7
 ) -> tuple[Tensor, Tensor, Tensor , Tensor]:
+    temperature = temperature if temperature is not None else torch.tensor(1., device=patches_emb.device)
+
     cosine_similarity, avg_cosine_sim, std_cosine_sim = get_cosine_stats(
         patches_emb=patches_emb, 
         temperature=temperature, 
