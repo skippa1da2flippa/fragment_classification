@@ -26,7 +26,12 @@ class GraphLocalAttention(nn.Module):
         self.cosine_temperature: float = cosine_temperature
         self.pruned: bool = pruned
 
-    def forward(self, x: Tensor, attn_mask: Tensor | None, bpt_partitions: Tensor | None) -> Tensor:
+    def forward(
+        self, 
+        x: Tensor, 
+        attn_mask: Tensor | None = None, 
+        bpt_partitions: Tensor | None = None
+    ) -> Tensor:
         patches: Tensor = x[:, 1:, :]
 
         graph_genout: GraphGenout = generate_connection(

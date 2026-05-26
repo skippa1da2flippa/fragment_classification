@@ -496,6 +496,13 @@ class CleopatraInput(NamedTuple):
     mask: Tensor
     label: Tensor
 
+class GraphVitInput(NamedTuple):
+    image: Tensor
+    label: Tensor
+    mask: Tensor | None = None
+    bpt_info: Tensor | None = None
+    name: str | None = None
+
 class CleopatraEnsembleInput(NamedTuple):
     image: list[Tensor] | Tensor
     label: Tensor

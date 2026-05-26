@@ -10,7 +10,7 @@ from glob import glob
 from dataset_handler.sampler import FixedBalancedBatchSampler, create_balanced_batches
 from utility.patch_shap_bpt import BPT
 from utility.tree_operation import get_adjacency_from_BPT
-from utility.utility import BptEnsembleInput, BptEnsembleDatasetPre, CleopatraEnsembleInput, eval_transform, get_attention_mask, load_image, load_json, train_transform
+from utility.utility import BptEnsembleInput, BptEnsembleDatasetPre, CleopatraEnsembleInput, GraphVitInput, eval_transform, get_attention_mask, load_image, load_json, train_transform
 from torch import Tensor
 from PIL.Image import Image
 
@@ -29,27 +29,33 @@ class StyleDataset(Dataset):
     `n_channels` (int):
         number of channels in the images (3 for RGB, 4 for RGBA)
     """
-    
+
     def __init__(
         self, 
         paths: list[str], 
         labels: list[str], 
         is_train: bool, 
-        return_name: bool = True
+        return_name: bool = True,
+        bpt_paths: list[str] | None = None,
     ) -> None:
-        self.paths = paths
-        unique_labels = np.unique(labels)
-        self.n_styles = len(unique_labels)
+        
+        self.paths: list[str] = paths
+        unique_labels: np.ndarray = np.unique(labels)
+        self.n_styles: int = len(unique_labels)
+
         if 0 not in unique_labels:
             labels = [l - 1 for l in labels] # 1-indexed to 0-indexed
-        self.labels = labels
-        self.transform = train_transform(False) if is_train else eval_transform()
+
+        self.labels: list[str] = labels
+        self.transform: callable = train_transform(False) if is_train else eval_transform()
         self.return_name: bool = return_name
+
+        self.bpt_paths: list[str] | None = bpt_paths
 
     def __len__(self) -> int:
         return len(self.paths)
 
-    def __getitem__(self, idx: int) -> CleopatraEnsembleInput:
+    def __getitem__(self, idx: int) -> CleopatraEnsembleInput | GraphVitInput:
         rgba: Image = load_image(self.paths[idx])
         rgba_t: Tensor = self.transform(rgba)  # Apply transform on full RGBA
         image: Tensor = rgba_t[:3]             # [3, 224, 224]
@@ -62,6 +68,18 @@ class StyleDataset(Dataset):
             label=label, 
             name=os.path.basename(self.paths[idx])
         )
+
+        if self.bpt_paths is not None:
+            dict_bpt: dict = load_json(self.bpt_paths[idx])
+            bpt: BPT = BPT.from_dict(dict_bpt)
+
+            out = GraphVitInput(
+                image=image,
+                label=label,
+                mask=alpha,
+                bpt_info=bpt,
+                name=os.path.basename(self.paths[idx])
+            )
             
         return out
 
@@ -237,13 +255,79 @@ def masking_background_collate(
     )
 
 class MaskingCollate:
-    def __init__(self, use_countourn: bool = False):
+    def __init__(self, use_countourn: bool = True):
         self.use_countourn: bool = use_countourn
 
     def __call__(self, batch) -> CleopatraEnsembleInput:
         return masking_background_collate(
             batch,
             use_countourn=self.use_countourn
+        )
+    
+
+def bpt_masking_collate(
+    batch: GraphVitInput, 
+    masking: bool = False,
+    use_countourn: bool = True,
+    bpt_percentage: float = 0.3
+) -> GraphVitInput:
+    img_t: list[Tensor] = []
+    alpha_t: list[Tensor] = []
+    bpt_t: list[Tensor] = []
+    names_t: list[str] = []
+    lbl_t: list[Tensor] = []
+
+    for elem in batch:
+        img_t.append(elem.image)
+        lbl_t.append(elem.label)
+
+        if masking:
+            alpha_t.append(
+                get_attention_mask(
+                    mask=elem.mask,
+                    use_countourn=use_countourn
+                )
+            )
+
+        if elem.bpt_info is not None:
+            bpt_t.append(
+                get_adjacency_from_BPT(
+                    tree=elem.bpt_info,
+                    percentage=bpt_percentage
+                )
+            )
+
+        if elem.name is not None:
+            names_t.append(elem.name)
+
+    return GraphVitInput(
+        image=torch.stack(img_t),
+        label=torch.stack(lbl_t), 
+        bpt_info=None if len(bpt_t) == 0 else torch.stack(bpt_t),
+        mask=None if len(alpha_t) == 0 else torch.stack(alpha_t),
+        name=names_t
+    )
+    
+class BptMaskingCollate:
+    def __init__(
+        self, 
+        masking: bool = False,
+        use_countourn: bool = True, 
+        bpt_percentage: float = 0.3,
+        bpt_margin: float = 0.1
+    ):
+        self.masking: bool = masking
+        self.use_countourn: bool = use_countourn
+        self.bpt_percentage: float = bpt_percentage
+        self.bpt_margin: float = bpt_margin
+
+    def __call__(self, batch) -> GraphVitInput:
+        return bpt_masking_collate(
+            batch=batch, 
+            use_countourn=self.use_countourn, 
+            bpt_percentage=self.bpt_percentage,
+            bpt_margin=self.bpt_margin, 
+            masking=self.masking
         )
 
 
@@ -416,28 +500,45 @@ class StyleDataModule(pl.LightningDataModule):
         test_labels: list[int],
         batch_size: int, 
         num_workers: int,
-        return_name: bool = False,
+        return_name: bool = True,
         train_sampler: bool = False,
         val_sampler: bool = False, 
         masking_vit: bool = False,
-        use_countourn: bool = False
+        use_countourn: bool = True,
+        bpt_percentage: float = 0.3,
+        train_bpt_paths: list[str] | None = None,
+        val_bpt_paths: list[str] | None = None,
+        test_bpt_paths: list[str] | None = None,
     ):
         super().__init__()
-        self.train_paths = train_paths
-        self.train_labels = train_labels
-        self.val_paths = val_paths
-        self.val_labels = val_labels
-        self.test_paths = test_paths
-        self.test_labels = test_labels
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.train_sampler = train_sampler
-        self.val_sampler = val_sampler
-        self.return_name = return_name
-        self.masking_vit = masking_vit
-        self.use_countourn = use_countourn
 
-        if self.masking_vit:
+        self.train_paths: list[str] = train_paths
+        self.train_labels: list[int] = train_labels
+        self.val_paths: list[str] = val_paths
+        self.val_labels: list[int] = val_labels
+        self.test_paths: list[str] = test_paths
+        self.test_labels: list[int] = test_labels
+        self.batch_size: int = batch_size
+        self.num_workers: int = num_workers
+        self.train_sampler: bool = train_sampler
+        self.val_sampler: bool = val_sampler
+        self.return_name: bool = return_name
+        self.masking_vit: bool = masking_vit
+        self.use_countourn: bool = use_countourn
+        self.train_bpt_paths: list[str] | None = train_bpt_paths
+        self.val_bpt_paths: list[str] | None = val_bpt_paths
+        self.test_bpt_paths: list[str] | None = test_bpt_paths
+        self.bpt_percentage: float = bpt_percentage
+
+
+        if self.train_bpt_paths is not None:
+            self.collate_fn = BptMaskingCollate(
+                masking=self.masking_vit,
+                use_countourn=self.use_countourn, 
+                bpt_percentage=self.bpt_percentage
+            )
+
+        elif self.masking_vit:
             self.collate_fn = MaskingCollate(use_countourn=self.use_countourn)
 
     def train_dataloader(self):
@@ -445,7 +546,8 @@ class StyleDataModule(pl.LightningDataModule):
             self.train_paths, 
             self.train_labels, 
             is_train=True,
-            return_name=self.return_name
+            return_name=self.return_name, 
+            bpt_paths=self.train_bpt_paths
         )
 
         if self.train_sampler:
@@ -462,7 +564,7 @@ class StyleDataModule(pl.LightningDataModule):
                 batch_sampler=train_sampler,  # this is your FixedBalancedBatchSampler
             )
 
-        if self.masking_vit:
+        if self.masking_vit or self.train_bpt_paths is not None:
             return DataLoader(
                 dataset=train_db,
                 batch_size=self.batch_size, 
@@ -485,7 +587,8 @@ class StyleDataModule(pl.LightningDataModule):
             self.val_paths, 
             self.val_labels, 
             is_train=False,
-            return_name=self.return_name
+            return_name=self.return_name,
+            bpt_paths=self.val_bpt_paths
         )
 
         if self.val_sampler:
@@ -502,7 +605,7 @@ class StyleDataModule(pl.LightningDataModule):
                 batch_sampler=val_sampler,  # this is your FixedBalancedBatchSampler
             )
 
-        if self.masking_vit:  
+        if self.masking_vit or self.val_bpt_paths is not None:  
             return DataLoader(
                 dataset=val_db,
                 batch_size=self.batch_size, 
@@ -519,9 +622,14 @@ class StyleDataModule(pl.LightningDataModule):
             )
     
     def test_dataloader(self):
-        if self.masking_vit:
+        if self.masking_vit or self.test_bpt_paths is not None:
             return DataLoader(
-                StyleDataset(self.test_paths, self.test_labels, is_train=False),
+                StyleDataset(
+                    self.test_paths, 
+                    self.test_labels, 
+                    is_train=False, 
+                    bpt_paths=self.test_bpt_paths
+                ),
                 batch_size=self.batch_size, num_workers=self.num_workers, 
                 collate_fn=self.collate_fn
             )
@@ -815,19 +923,29 @@ def init_data_module(
     data_dir: str, 
     batch_size: int = 32, 
     num_workers: int = 4, 
-    sampler=False, 
+    sampler: bool = False, 
     use_test: bool = False, 
     use_masked_vit: bool = False, 
     use_contourn: bool = True,
-    return_name: bool = False
+    return_name: bool = True, 
+    bpt_paths: list[str] | None = None,
+    bpt_percentage: float = 0.3
 ):
     train_paths, train_labels = load_paths_and_labels(os.path.join(data_dir, 'train'))
     val_paths, val_labels = load_paths_and_labels(os.path.join(data_dir, 'valid'))
     test_paths, test_labels = load_paths_and_labels(os.path.join(data_dir, 'test'))
 
+    if bpt_paths is not None:
+        train_bpt_paths, _ = load_paths_and_labels(os.path.join(bpt_paths, 'train'))
+        val_bpt_paths, _ = load_paths_and_labels(os.path.join(bpt_paths, 'valid'))
+        test_bpt_paths, _ = load_paths_and_labels(os.path.join(bpt_paths, 'test'))
+
     if use_test:
         train_paths += val_paths
         train_labels += val_labels
+
+        if bpt_paths is not None:
+            train_bpt_paths += val_bpt_paths
 
         return StyleDataModule(
             train_paths=train_paths, 
@@ -842,7 +960,11 @@ def init_data_module(
             val_sampler=sampler,
             masking_vit=use_masked_vit,
             use_countourn=use_contourn, 
-            return_name=return_name
+            return_name=return_name, 
+            train_bpt_paths=train_bpt_paths if bpt_paths is not None else None,
+            val_bpt_paths=val_bpt_paths if bpt_paths is not None else None,
+            test_bpt_paths=test_bpt_paths if bpt_paths is not None else None,
+            bpt_percentage=bpt_percentage
         )
     else:
         return StyleDataModule(
@@ -858,7 +980,11 @@ def init_data_module(
             val_sampler=sampler,
             masking_vit=use_masked_vit,
             use_countourn=use_contourn, 
-            return_name=return_name
+            return_name=return_name, 
+            train_bpt_paths=train_bpt_paths if bpt_paths is not None else None,
+            val_bpt_paths=val_bpt_paths if bpt_paths is not None else None,
+            test_bpt_paths=test_bpt_paths if bpt_paths is not None else None,
+            bpt_percentage=bpt_percentage
         )
     
 

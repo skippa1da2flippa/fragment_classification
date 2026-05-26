@@ -258,11 +258,11 @@ class GraphVit(VisionTransformer):
             self.blocks[block_idx] = new_block
 
     def forward_features(
-            self,
-            x: Tensor,
-            bpt_partitions: Tensor | None = None,
-            attn_mask: Optional[Tensor] = None,
-            is_causal: bool = False,
+        self,
+        x: Tensor,
+        bpt_partitions: Tensor | None = None,
+        attn_mask: Optional[Tensor] = None,
+        is_causal: bool = False
     ) -> Tensor:
         """Forward pass through feature layers (embeddings, transformer blocks, post-transformer norm)."""
         x = self.patch_embed(x)
@@ -286,12 +286,11 @@ class GraphVit(VisionTransformer):
             for blk in self.blocks:
                 vit_input["x"] = blk(**vit_input)
 
-        # elif self.grad_checkpointing and not torch.jit.is_scripting():
-        #     x = checkpoint_seq(self.blocks, x)
-        else:
+        else: # If no attn_mask nor bpt_paritions was given
             x = self.blocks(x)
 
         x = self.norm(x)
+
         return x
 
 
@@ -302,6 +301,13 @@ class GraphVit(VisionTransformer):
         attn_mask: Optional[Tensor] = None,
         is_causal: bool = False
     ) -> Tensor:
-        x = self.forward_features(x, bpt_partitions=bpt_partitions, attn_mask=attn_mask, is_causal=is_causal)
+        
+        x = self.forward_features(
+            x=x, 
+            bpt_partitions=bpt_partitions, 
+            attn_mask=attn_mask, 
+            is_causal=is_causal
+        )
         x = self.forward_head(x)
+
         return x
