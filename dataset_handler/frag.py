@@ -326,7 +326,6 @@ class BptMaskingCollate:
             batch=batch, 
             use_countourn=self.use_countourn, 
             bpt_percentage=self.bpt_percentage,
-            bpt_margin=self.bpt_margin, 
             masking=self.masking
         )
 

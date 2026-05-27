@@ -391,7 +391,7 @@ def generate_connection(
         bpt_adjacency = bpt_adjacency.bool() 
 
         if pruned:
-            edge_mask = (bpt_adjacency & edge_mask)  
+            edge_mask = (bpt_adjacency[:, 1:, 1:] & edge_mask)  
         else:
             hide_cls: Tensor = torch.ones_like(bpt_adjacency)
             hide_cls[:, 0, :] = False

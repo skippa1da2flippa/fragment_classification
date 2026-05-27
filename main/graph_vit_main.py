@@ -11,7 +11,7 @@ if __name__ == "__main__":
 
     data_module = init_data_module(
         data_dir="datasets_test\\cleopatra_mock_test",
-        batch_size=256, 
+        batch_size=20, 
         num_workers=8,
         sampler=False, 
         use_test=False, 
@@ -31,7 +31,8 @@ if __name__ == "__main__":
                     head_type=headtype, 
                     masked_attention=False, 
                     out_dir="VALID_CLEOPATRA", 
-                    optimization_mode="max"
+                    optimization_mode="max",
+                    db_path="datasets_test\\cleopatra_mock_test"
                 ), 
                 n_trials=9, 
                 n_jobs=1

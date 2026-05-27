@@ -65,14 +65,14 @@ class GraphVit(VitClassifier):
             vit_model=self.backbone,    
             gnn_type=self.hparams.gnn_type,
             gnn_num_layer=self.hparams.gnn_num_layer,
-            global_pool=self.hparams.head_type
+            global_pool=HeadType[self.hparams.head_type].value
         )
 
     def on_train_start(self) -> None:
         # TODO see if these two are necessary
         # technically they shouldn't
-        self.head.requires_grad = True
-        self.norm.requires_grad = True
+        self.backbone.head.requires_grad = True
+        self.backbone.norm.requires_grad = True
 
         for block in self.backbone.blocks:
             for name, param in block.named_parameters():
@@ -252,6 +252,7 @@ class GraphVit(VitClassifier):
                     head_no_decay.append(param)
                 else:
                     head_decay.append(param)
+                    
             elif "graph_local_attn" in name or "norm0" in name:  # local attention and its norm
                 if "bias" in name or "norm" in name.lower():
                     gnn_no_decay.append(param)

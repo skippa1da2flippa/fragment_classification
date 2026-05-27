@@ -2,12 +2,14 @@ import os
 from typing import Callable, Literal
 import optuna as op 
 import pytorch_lightning as pl
+import timm
 import torch
 from models_handler.base.base_ensemble import BaseEnsemble
 from models_handler.ensemble.graph_ensemble import GraphEnsemble
 from models_handler.ensemble.weighted_avg_ensemble import WeightedAverageEnsemble
 from models_handler.frenziness.gnn import UltimateGraphApproach
 from models_handler.transformer.gnn_vision_transformer import GraphVisionTransformer
+from models_handler.transformer.graph_vit import GraphVit
 from models_handler.transformer.multi_task_vit import MultiTaskVit
 from utility.utility import BackboneType, GNNType, HeadType, get_epoch_per_style
 from models_handler.transformer.vit import VitClassifier
@@ -118,7 +120,8 @@ def graph_attention_vit_wrapper(
     num_epoch: int = 40, 
     k_classes: int = 11, 
     masked_attention: bool = False,
-    optimization_mode: Literal["min", "max"] = "min"
+    optimization_mode: Literal["min", "max"] = "min", 
+    db_path: str = ""
 ) -> Callable[[op.trial.Trial], float]:
 
     def objective(trial: op.trial.Trial) -> float:
@@ -129,28 +132,26 @@ def graph_attention_vit_wrapper(
         min_epochs_head = trial.suggest_int("min_epochs_head", 1, 7)
         # trial.suggest_categorical("head_type", ["CLS_SINGLE", "SEQ_ENSEMBLE"])
         k_classes = 11
+
+        cosine_threshold = trial.suggest_categorical("cosine_threshold", [0.7, 0.8, 0.9])
         
        
         use_weighted_loss: bool = trial.suggest_categorical("weighted_loss", [True, False])
 
-        # Create the model with the current set of hyperparameters
-        model = backbone_class(
+        wrapper_model = GraphVit(
             backbone_type=backbone_type,
-            lr=lr,
-            weight_decay=weight_decay,
-            min_epochs_head=min_epochs_head,
             head_type=head_type.name,
-            k_classes=k_classes, 
-            use_weighted_loss=use_weighted_loss, 
-            masked_attention=masked_attention, 
-            full_dataset=False
-        )
-
-        graph_model = GraphVisionTransformer.build_from_vision_transformer(
-            vit_model=model.backbone,
             gnn_type=gnn_type,
             gnn_num_layer=gnn_num_layer,
-            global_pool=head_type.name
+            lr=lr,
+            weight_decay=weight_decay,
+            min_epoch=min_epochs_head,
+            k_classes=k_classes,
+            use_weighted_loss=use_weighted_loss,
+            full_dataset=False,
+            masked_attention=masked_attention,
+            db_path=db_path, 
+            cosine_threshold=cosine_threshold
         )
 
         # -----------------------------
@@ -190,7 +191,7 @@ def graph_attention_vit_wrapper(
             devices=1
         )
 
-        trainer.fit(model=graph_model, datamodule=datamodule)
+        trainer.fit(model=wrapper_model, datamodule=datamodule)
 
         # -----------------------------
         # 🎯 Return metric to optimize
