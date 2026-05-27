@@ -1,6 +1,8 @@
 # Virtual envs
 .venv/
 
+datasets_test/*
+db_bpt_normal*/
 # IDE
 .vscode/
 

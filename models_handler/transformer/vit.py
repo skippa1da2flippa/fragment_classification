@@ -75,7 +75,6 @@ class VitClassifier(BaseLearner):
         )
         self.forzen_blocks_map: Tensor = torch.zeros(len(self.backbone.blocks))
 
-        # Metrics — Lightning will handle aggregation & reset
         self.val_accuracy: tm.Metric = tm.Accuracy(task="multiclass", num_classes=k_classes) 
         self.val_f1: tm.Metric = tm.F1Score(task="multiclass", num_classes=k_classes, average="macro") 
         self.val_auc: tm.Metric = tm.AUROC(task="multiclass", num_classes=k_classes, average="macro") 

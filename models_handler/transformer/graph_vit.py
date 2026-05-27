@@ -3,6 +3,7 @@ from torch import Tensor
 import torch
 import torch.nn.functional as F
 from timm.models.vision_transformer import global_pool_nlc
+from models_handler.transformer.gnn_vision_transformer import GraphVisionTransformer
 from models_handler.transformer.vit import VitClassifier
 from utility.utility import CleopatraOut, GraphVitInput, HeadType
 
@@ -60,10 +61,11 @@ class GraphVit(VitClassifier):
 
     def _build_model(self) -> None:
 
-        self.backbone = GraphVit.build_from_vision_transformer(
+        self.backbone = GraphVisionTransformer.build_from_vision_transformer(
             vit_model=self.backbone,    
             gnn_type=self.hparams.gnn_type,
             gnn_num_layer=self.hparams.gnn_num_layer,
+            global_pool=self.hparams.head_type
         )
 
     def on_train_start(self) -> None:

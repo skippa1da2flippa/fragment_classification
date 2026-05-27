@@ -7,6 +7,7 @@ from models_handler.base.base_ensemble import BaseEnsemble
 from models_handler.ensemble.graph_ensemble import GraphEnsemble
 from models_handler.ensemble.weighted_avg_ensemble import WeightedAverageEnsemble
 from models_handler.frenziness.gnn import UltimateGraphApproach
+from models_handler.transformer.gnn_vision_transformer import GraphVisionTransformer
 from models_handler.transformer.multi_task_vit import MultiTaskVit
 from utility.utility import BackboneType, GNNType, HeadType, get_epoch_per_style
 from models_handler.transformer.vit import VitClassifier
@@ -105,6 +106,101 @@ def just_a_wrapper(
     
     return objective
 
+
+def graph_attention_vit_wrapper(
+    model_type: BackboneType, 
+    head_type: HeadType,
+    datamodule: pl.LightningDataModule, 
+    out_dir: str,
+    gnn_type: str = "GAT",
+    gnn_num_layer: int = 1,
+    backbone_class: type[pl.LightningModule] = VitClassifier,
+    num_epoch: int = 40, 
+    k_classes: int = 11, 
+    masked_attention: bool = False,
+    optimization_mode: Literal["min", "max"] = "min"
+) -> Callable[[op.trial.Trial], float]:
+
+    def objective(trial: op.trial.Trial) -> float:
+        # Hyperparameter search space
+        backbone_type = model_type.name # trial.suggest_categorical("backbone_type", ["VIT_16", "DEIT_16"])
+        lr = trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+        weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
+        min_epochs_head = trial.suggest_int("min_epochs_head", 1, 7)
+        # trial.suggest_categorical("head_type", ["CLS_SINGLE", "SEQ_ENSEMBLE"])
+        k_classes = 11
+        
+       
+        use_weighted_loss: bool = trial.suggest_categorical("weighted_loss", [True, False])
+
+        # Create the model with the current set of hyperparameters
+        model = backbone_class(
+            backbone_type=backbone_type,
+            lr=lr,
+            weight_decay=weight_decay,
+            min_epochs_head=min_epochs_head,
+            head_type=head_type.name,
+            k_classes=k_classes, 
+            use_weighted_loss=use_weighted_loss, 
+            masked_attention=masked_attention, 
+            full_dataset=False
+        )
+
+        graph_model = GraphVisionTransformer.build_from_vision_transformer(
+            vit_model=model.backbone,
+            gnn_type=gnn_type,
+            gnn_num_layer=gnn_num_layer,
+            global_pool=head_type.name
+        )
+
+        # -----------------------------
+        # 🧾 Logger + Checkpoint
+        # -----------------------------
+        base_path: str = os.path.join(out_dir, f"logs_{head_type.name}")
+        opt_metric_suffix: str = "val_loss" if optimization_mode == "min" else "val_accuracy"
+        logger_csv = CSVLogger(
+            save_dir=os.path.join(base_path), 
+            name="csv"
+        )
+
+        checkpoint_cb = pl.callbacks.ModelCheckpoint(
+            dirpath=os.path.join(base_path, f"ckpt"),
+            filename=f"weights",
+            monitor=opt_metric_suffix,
+            mode=optimization_mode,
+            save_top_k=1
+        )
+        early_stopping_cb = pl.callbacks.EarlyStopping(
+            monitor=opt_metric_suffix,     # Metric to monitor
+            mode=optimization_mode,             # "min" for loss, "max" for accuracy/F1
+            patience=5,             # Number of epochs with no improvement
+            min_delta=1e-4,         # Required improvement threshold
+            verbose=False
+        )
+
+        # -----------------------------
+        # 🚀 Train
+        # -----------------------------
+        trainer = pl.Trainer(
+            max_epochs=num_epoch,
+            logger=logger_csv,
+            callbacks=[checkpoint_cb, early_stopping_cb],
+            enable_progress_bar=True,
+            accelerator="auto",
+            devices=1
+        )
+
+        trainer.fit(model=graph_model, datamodule=datamodule)
+
+        # -----------------------------
+        # 🎯 Return metric to optimize
+        # -----------------------------
+        # You can also return negative accuracy/F1 if you prefer maximizing
+        alternative: float = float("inf") if optimization_mode == "min" else -float("inf")
+        score = checkpoint_cb.best_model_score.item() if checkpoint_cb.best_model_score else alternative
+        return score
+    
+    return objective
 
 def ultimate_graph_wrapper(
     datamodule: pl.LightningDataModule,

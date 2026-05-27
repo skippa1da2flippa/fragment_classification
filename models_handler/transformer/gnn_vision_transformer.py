@@ -10,7 +10,7 @@ import torch.nn as nn
 from models_handler.layer.super_block import SuperBlock
 
 
-class GraphVit(VisionTransformer):
+class GraphVisionTransformer(VisionTransformer):
     def __init__(
         self,
         gnn_type: str,
@@ -125,12 +125,12 @@ class GraphVit(VisionTransformer):
     def build_from_vision_transformer(
         vit_model: VisionTransformer,
         gnn_type: str,
+        global_pool: Literal['', 'avg', 'avgmax', 'max', 'token', 'map'],
         gnn_num_layer: int = 1,
         img_size: Union[int, Tuple[int, int]] = 224,
         patch_size: Union[int, Tuple[int, int]] = 16,
         in_chans: int = 3,
         num_classes: int = 1000,
-        global_pool: Literal['', 'avg', 'avgmax', 'max', 'token', 'map'] = 'token',
         embed_dim: int = 768,
         depth: int = 12,
         num_heads: int = 12,
@@ -165,9 +165,9 @@ class GraphVit(VisionTransformer):
         act_layer: Optional[LayerType] = None,
         block_fn: Type[nn.Module] = Block,
         mlp_layer: Type[nn.Module] = Mlp
-    ) -> 'GraphVit':
+    ) -> 'GraphVisionTransformer':
         
-        graph_vit: 'GraphVit' = GraphVit(
+        graph_vit: 'GraphVisionTransformer' = GraphVisionTransformer(
             gnn_type=gnn_type,
             gnn_num_layer=gnn_num_layer,
             pretrained=True,
