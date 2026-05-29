@@ -64,11 +64,12 @@ class GraphVit(VitClassifier):
         self.backbone = GraphVisionTransformer.build_from_vision_transformer(
             vit_model=self.backbone,    
             gnn_type=self.hparams.gnn_type,
-            gnn_num_layer=self.hparams.gnn_num_layer,
-            global_pool=HeadType[self.hparams.head_type].value
+            gnn_num_layer=self.hparams.gnn_num_layer
         )
 
     def on_train_start(self) -> None:
+        torch.autograd.set_detect_anomaly(True)
+
         # TODO see if these two are necessary
         # technically they shouldn't
         self.backbone.head.requires_grad = True
@@ -215,7 +216,12 @@ class GraphVit(VitClassifier):
         batch: GraphVitInput, 
         step_type: str = "train"
     ) -> CleopatraOut:
-        img, label, attention_mask, bpt_info, _ = batch
+        
+        if isinstance(batch, GraphVitInput):
+            img, label, attention_mask, bpt_info, _ = batch
+        else:
+            img, label, attention_mask, _ = batch
+            bpt_info = None
 
         weights = self.loss_weights if step_type == "train" else torch.ones_like(self.loss_weights) 
 

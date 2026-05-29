@@ -3,6 +3,7 @@ from collections import OrderedDict
 from timm.models.vision_transformer import Block
 from timm.layers import (LayerNorm, LayerType, Mlp, Attention)
 from torch import Tensor
+import torch
 import torch.nn as nn
 from typing import Optional, Type
 
@@ -71,16 +72,27 @@ class SuperBlock(Block):
     
 
     def forward(
-        self, x: Tensor, 
+        self, 
+        x: Tensor, 
         attn_mask: Tensor | None = None, 
         bpt_partitions: Tensor | None = None
     ) -> Tensor:
-        x[:, 1:, :] = self.norm0(x[:, 1:, :])
+        norm0_x: Tensor = self.norm0(x[:, 1:, :])
         local_out: Tensor = self.local_attention(
-            x=x,
+            x=norm0_x,
             attn_mask=attn_mask,
             bpt_partitions=bpt_partitions
         )
-        x[:, 1:, :] = x[:, 1:, :] + local_out
+        local_attention: Tensor = x[:, 1:, :] + local_out
+        pre_block_out: Tensor = torch.cat(
+            [
+                x[:, 1, :].unsqueeze(dim=1), 
+                local_attention
+            ], 
+            dim=1
+        )
 
-        return super().forward(x=x, attn_mask=attn_mask)
+        return super().forward(
+            x=pre_block_out, 
+            attn_mask=attn_mask
+        )

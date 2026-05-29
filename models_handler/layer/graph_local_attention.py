@@ -32,7 +32,7 @@ class GraphLocalAttention(nn.Module):
         attn_mask: Tensor | None = None, 
         bpt_partitions: Tensor | None = None
     ) -> Tensor:
-        patches: Tensor = x[:, 1:, :]
+        patches: Tensor = x
 
         graph_genout: GraphGenout = generate_connection(
             patches_emb=patches,

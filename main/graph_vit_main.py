@@ -11,13 +11,13 @@ if __name__ == "__main__":
 
     data_module = init_data_module(
         data_dir="datasets_test\\cleopatra_mock_test",
-        batch_size=20, 
-        num_workers=8,
+        batch_size=2, 
+        num_workers=1,
         sampler=False, 
         use_test=False, 
         use_masked_vit=False, 
         use_contourn=False, 
-        bpt_paths="datasets_test\\db_bpt_normal_test"
+        bpt_paths=None # "datasets_test\\db_bpt_normal_test"
     )
 
     for headtype in [HeadType.CLS_SINGLE, HeadType.SEQ_ENSEMBLE]:
