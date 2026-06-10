@@ -961,7 +961,7 @@ def init_data_module(
             use_countourn=use_contourn, 
             return_name=return_name, 
             train_bpt_paths=train_bpt_paths if bpt_paths is not None else None,
-            val_bpt_paths=val_bpt_paths if bpt_paths is not None else None,
+            val_bpt_paths=test_bpt_paths if bpt_paths is not None else None,
             test_bpt_paths=test_bpt_paths if bpt_paths is not None else None,
             bpt_percentage=bpt_percentage
         )

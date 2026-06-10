@@ -149,7 +149,7 @@ class GraphEnsemble(BaseEnsemble):
                 ensemble_logits_t=learners_logits, 
                 ensemble_patches_t=learners_embedding,
                 choice=self.hparams.decision_mode, 
-                random_choice=False
+                random_choice=True
             )
 
             mask_map: Tensor = chosen_ids == self.hparams.mask_on_learner

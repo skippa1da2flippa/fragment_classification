@@ -1,4 +1,4 @@
-import pytorch_lightning as pl
+import torch.nn as nn
 from torch import Tensor
 import torch
 import torch.nn.functional as F
@@ -42,8 +42,8 @@ class GraphVit(VitClassifier):
             use_weighted_loss=use_weighted_loss,
             contrastive_loss=contrastive_loss,
             masked_attention=masked_attention,
-            full_dataset = full_dataset, 
-            db_path= db_path
+            full_dataset=full_dataset, 
+            db_path=db_path
         )
 
         self.save_hyperparameters(
@@ -68,7 +68,6 @@ class GraphVit(VitClassifier):
         )
 
     def on_train_start(self) -> None:
-        torch.autograd.set_detect_anomaly(True)
 
         # TODO see if these two are necessary
         # technically they shouldn't
@@ -77,7 +76,7 @@ class GraphVit(VitClassifier):
 
         for block in self.backbone.blocks:
             for name, param in block.named_parameters():
-                if "graph_local_attn" in name or "norm0" in name:
+                if "local_attention" in name or "norm0" in name:
                     param.requires_grad = True
                 else:
                     param.requires_grad = False
@@ -137,7 +136,6 @@ class GraphVit(VitClassifier):
                     )
 
             if return_all:
-                # TODO you might need the cls
                 out = torch.concat([
                         pooled_out.unsqueeze(dim=1), 
                         out[:, 1:, :]
@@ -259,7 +257,7 @@ class GraphVit(VitClassifier):
                 else:
                     head_decay.append(param)
                     
-            elif "graph_local_attn" in name or "norm0" in name:  # local attention and its norm
+            elif "local_attention" in name or "norm0" in name:  # local attention and its norm
                 if "bias" in name or "norm" in name.lower():
                     gnn_no_decay.append(param)
                 else:
@@ -284,6 +282,28 @@ class GraphVit(VitClassifier):
         )
 
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
+    
+
+    def apply_params(
+        self, 
+        module: nn.Module, 
+        value: bool = False,
+        exclusion_lst: list[str] = [], 
+        use_block_map: bool = False
+    ) -> None:
+        
+        if use_block_map:
+            for flag, block in zip(self.forzen_blocks_map, module):
+                self.apply_params(
+                    module=block,
+                    value=bool(flag), 
+                    exclusion_lst=["local_attention", "norm0"]
+                )
+        else:
+            for name, param in module.named_parameters():
+                if not any(ex in name for ex in exclusion_lst):  # substring match
+                    param.requires_grad = value
+
 
 
 

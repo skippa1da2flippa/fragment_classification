@@ -6,10 +6,11 @@ from utility.utility import kl_similarity
 class KL_ContrastiveLoss(nn.Module):
     def __init__(
         self, 
-        symmetric: bool = True,
+        symmetric: bool = False,
         reduction: str = "sum", 
         temperature: float = 6.,
-        p_plus: bool = False
+        p_plus: bool = False, 
+        strong_pull: bool = False
     ) -> None:
         super().__init__()
 
@@ -17,6 +18,7 @@ class KL_ContrastiveLoss(nn.Module):
         self.reduction: str = reduction
         self.temperature: float = temperature
         self.p_plus: bool = p_plus
+        self.strong_pull : bool = strong_pull
 
     def forward(
         self, 
@@ -24,6 +26,10 @@ class KL_ContrastiveLoss(nn.Module):
         target: Tensor,
         weight: Tensor | None = None
     ) -> Tensor:
+        
+        if self.strong_pull:
+            pass
+
         kl_sim: Tensor = kl_similarity(
             logits=input,
             symmetric=self.symmetric,
